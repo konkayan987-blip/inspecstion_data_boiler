@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบตรวจสอบหม้อไอน้ำ</title>
+    <style>
+        :root { font-family: Tahoma, "Segoe UI", sans-serif; color: #1e293b; background: #f1f5f9; }
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        header { padding: 18px 24px; color: white; background: #0f172a; }
+        h1 { margin: 0; font-size: 20px; }
+        header p { margin: 5px 0 0; color: #cbd5e1; font-size: 12px; }
+        main { max-width: 1600px; margin: auto; padding: 16px; }
+        nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        nav button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 16px; background: white; color: #334155; font: inherit; font-size: 13px; cursor: pointer; }
+        nav button[aria-selected="true"] { border-color: #d97706; background: #f59e0b; color: #111827; font-weight: 700; }
+        .hint { margin: 0 0 10px; color: #64748b; font-size: 12px; }
+        .frame-wrap { overflow: hidden; border: 1px solid #dbe2ea; border-radius: 12px; background: white; }
+        iframe { display: block; width: 100%; height: calc(100vh - 180px); min-height: 700px; border: 0; }
+        iframe[hidden] { display: none; }
+        @media (max-width: 700px) {
+            header { padding: 14px; }
+            main { padding: 10px; }
+            nav button { flex: 1 1 140px; }
+            iframe { height: calc(100vh - 210px); min-height: 620px; }
+        }
+        @media print { header, nav, .hint, iframe[hidden] { display: none !important; } main { padding: 0; } .frame-wrap { border: 0; } iframe { height: auto; min-height: 0; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ระบบบันทึกและตรวจสอบหม้อไอน้ำ</h1>
+        <p>FM-001 ตรวจหม้อไอน้ำ · FM-002 ตรวจสตีมแทร๊ป · FM-004 ตรวจค่า pH</p>
+    </header>
+    <main>
+        <nav aria-label="เลือกแบบฟอร์ม">
+            <button type="button" data-form="daily" aria-selected="true">ตรวจหม้อไอน้ำรายวัน</button>
+            <button type="button" data-form="steam-trap" aria-selected="false">ตรวจสตีมแทร๊ป</button>
+            <button type="button" data-form="ph" aria-selected="false">ตรวจค่า pH</button>
+        </nav>
+        <p class="hint">ตั้งค่าการเชื่อมต่อ Google Sheets ได้จากปุ่มซิงค์ในแบบฟอร์มตรวจหม้อไอน้ำรายวัน</p>
+        <section class="frame-wrap" aria-label="แบบฟอร์มตรวจสอบ">
+            <iframe id="frame-daily" title="ตรวจหม้อไอน้ำรายวัน" src="daily_boiler_inspection_system.html"></iframe>
+            <iframe id="frame-steam-trap" title="ตรวจสตีมแทร๊ป" src="steam_trap_inspection.html" hidden></iframe>
+            <iframe id="frame-ph" title="ตรวจค่า pH" src="ph_inspection.html" hidden></iframe>
+        </section>
+    </main>
+    <script>
+        const forms = {
+            daily: document.getElementById('frame-daily'),
+            'steam-trap': document.getElementById('frame-steam-trap'),
+            ph: document.getElementById('frame-ph')
+        };
+        let syncSettings = null;
+
+        function selectForm(name) {
+            if (!forms[name]) return;
+            Object.keys(forms).forEach(key => {
+                forms[key].hidden = key !== name;
+                document.querySelector(`[data-form="${key}"]`).setAttribute('aria-selected', String(key === name));
+            });
+        }
+
+        document.querySelectorAll('[data-form]').forEach(button => {
+            button.addEventListener('click', () => selectForm(button.dataset.form));
+        });
+
+        forms.daily.addEventListener('load', () => {
+            forms.daily.contentWindow.postMessage({ type: 'get-sync-config' }, '*');
+        });
+        ['steam-trap', 'ph'].forEach(name => {
+            forms[name].addEventListener('load', () => {
+                if (syncSettings) forms[name].contentWindow.postMessage(syncSettings, '*');
+            });
+        });
+
+        window.addEventListener('message', event => {
+            const isChildFrame = Object.values(forms).some(frame => frame.contentWindow === event.source);
+            if (!isChildFrame || !event.data) return;
+            if (event.source === forms.daily.contentWindow && event.data.type === 'sync-config') {
+                syncSettings = event.data;
+                ['steam-trap', 'ph'].forEach(name => forms[name].contentWindow.postMessage(syncSettings, '*'));
+                return;
+            }
+            if (event.data.type === 'select-inspection-form') {
+                if (event.data.form === 'ph' && /^\d{4}-\d{2}$/.test(event.data.month || '')) {
+                    forms.ph.src = `ph_inspection.html?month=${encodeURIComponent(event.data.month)}`;
+                }
+                selectForm(event.data.form);
+            }
+        });
+    </script>
+</body>
+</html>
