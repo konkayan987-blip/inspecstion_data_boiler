@@ -575,7 +575,7 @@
 
     <!-- Edit/Add Entry Modal -->
     <div id="entry-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
-        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full p-6 space-y-4 my-8">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-5xl w-full p-4 md:p-5 space-y-3 my-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <div class="flex justify-between items-center border-b pb-3">
                 <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
                     <i class="fa-solid fa-pen-to-square text-amber-600"></i> บันทึกข้อมูลช่วงเวลา: <span id="modal-hour-title" class="text-amber-600">08:00</span>
@@ -589,7 +589,7 @@
                 <input type="hidden" id="modal-hour-index">
 
                 <!-- Parameters Grid -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
                     
                     <!-- 1. ความดันไอน้ำ -->
                     <div class="space-y-1">
