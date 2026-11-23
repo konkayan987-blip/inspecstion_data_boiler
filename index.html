@@ -3,92 +3,2014 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบตรวจสอบหม้อไอน้ำ</title>
+    <title>ระบบบันทึกการตรวจสอบประจำวันของหม้อไอน้ำ - LFB-BOS-FM-001 R.02</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (xlsx) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Prompt Font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { font-family: Tahoma, "Segoe UI", sans-serif; color: #1e293b; background: #f1f5f9; }
-        * { box-sizing: border-box; }
-        body { margin: 0; }
-        header { padding: 18px 24px; color: white; background: #0f172a; }
-        h1 { margin: 0; font-size: 20px; }
-        header p { margin: 5px 0 0; color: #cbd5e1; font-size: 12px; }
-        main { max-width: 1600px; margin: auto; padding: 16px; }
-        nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-        nav button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 16px; background: white; color: #334155; font: inherit; font-size: 13px; cursor: pointer; }
-        nav button[aria-selected="true"] { border-color: #d97706; background: #f59e0b; color: #111827; font-weight: 700; }
-        .hint { margin: 0 0 10px; color: #64748b; font-size: 12px; }
-        .frame-wrap { overflow: hidden; border: 1px solid #dbe2ea; border-radius: 12px; background: white; }
-        iframe { display: block; width: 100%; height: calc(100vh - 180px); min-height: 700px; border: 0; }
-        iframe[hidden] { display: none; }
-        @media (max-width: 700px) {
-            header { padding: 14px; }
-            main { padding: 10px; }
-            nav button { flex: 1 1 140px; }
-            iframe { height: calc(100vh - 210px); min-height: 620px; }
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #f3f4f6;
         }
-        @media print { header, nav, .hint, iframe[hidden] { display: none !important; } main { padding: 0; } .frame-wrap { border: 0; } iframe { height: auto; min-height: 0; } }
+        .out-of-spec {
+            background-color: #fee2e2 !important;
+            color: #dc2626 !important;
+            font-weight: 600;
+        }
+        .spec-warning {
+            background-color: #fef3c7 !important;
+            color: #d97706 !important;
+            font-weight: 600;
+        }
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            body {
+                background-color: white;
+                font-size: 11px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+        /* Custom scrollbar for wide tables */
+        .table-scroll::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .table-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        input[type="number"] {
+            min-width: 0;
+            min-height: 40px;
+            font-size: 14px;
+        }
     </style>
 </head>
-<body>
-    <header>
-        <h1>ระบบบันทึกและตรวจสอบหม้อไอน้ำ</h1>
-        <p>FM-001 ตรวจหม้อไอน้ำ · FM-002 ตรวจสตีมแทร๊ป · FM-004 ตรวจค่า pH</p>
-    </header>
-    <main>
-        <nav aria-label="เลือกแบบฟอร์ม">
-            <button type="button" data-form="daily" aria-selected="true">ตรวจหม้อไอน้ำรายวัน</button>
-            <button type="button" data-form="steam-trap" aria-selected="false">ตรวจสตีมแทร๊ป</button>
-            <button type="button" data-form="ph" aria-selected="false">ตรวจค่า pH</button>
-        </nav>
-        <p class="hint">ตั้งค่าการเชื่อมต่อ Google Sheets ได้จากปุ่มซิงค์ในแบบฟอร์มตรวจหม้อไอน้ำรายวัน</p>
-        <section class="frame-wrap" aria-label="แบบฟอร์มตรวจสอบ">
-            <iframe id="frame-daily" title="ตรวจหม้อไอน้ำรายวัน" src="daily_boiler_inspection_system.html"></iframe>
-            <iframe id="frame-steam-trap" title="ตรวจสตีมแทร๊ป" src="steam_trap_inspection.html" hidden></iframe>
-            <iframe id="frame-ph" title="ตรวจค่า pH" src="ph_inspection.html" hidden></iframe>
-        </section>
-    </main>
-    <script>
-        const forms = {
-            daily: document.getElementById('frame-daily'),
-            'steam-trap': document.getElementById('frame-steam-trap'),
-            ph: document.getElementById('frame-ph')
-        };
-        let syncSettings = null;
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
 
-        function selectForm(name) {
-            if (!forms[name]) return;
-            Object.keys(forms).forEach(key => {
-                forms[key].hidden = key !== name;
-                document.querySelector(`[data-form="${key}"]`).setAttribute('aria-selected', String(key === name));
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-md no-print sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-amber-500 text-slate-900 p-2.5 rounded-xl font-bold flex items-center justify-center shadow-lg">
+                    <i class="fa-solid fa-fire-flame-curved text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold tracking-wide">ระบบบันทึกการตรวจสอบประจำวันของหม้อไอน้ำ</h1>
+                    <p class="text-xs text-slate-400"> LFB-BOS-FM-001 R.02</p>
+                </div>
+            </div>
+
+            <!-- Boiler Selector Tabs -->
+            <div class="flex items-center bg-slate-800 p-1.5 rounded-xl border border-slate-700">
+                <button onclick="switchBoiler(1)" id="btn-boiler-1" class="px-3.5 py-1.5 text-xs md:text-sm font-medium rounded-lg transition-all flex items-center gap-2 bg-amber-500 text-slate-950 font-semibold shadow">
+                    <i class="fa-solid fa-industry"></i> บอยเลอร์ 1
+                </button>
+                <button onclick="switchBoiler(2)" id="btn-boiler-2" class="px-3.5 py-1.5 text-xs md:text-sm font-medium text-slate-300 rounded-lg hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-industry"></i> บอยเลอร์ 2
+                </button>
+                <button onclick="switchBoiler(3)" id="btn-boiler-3" class="px-3.5 py-1.5 text-xs md:text-sm font-medium text-slate-300 rounded-lg hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-industry"></i> บอยเลอร์ 3
+                </button>
+            </div>
+
+            <!-- User Info / Login Controls -->
+            <div class="flex items-center gap-3">
+                <button onclick="openSyncModal()" id="sync-badge" title="ตั้งค่าการซิงค์ Google Sheets" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium flex items-center gap-2 transition">
+                    <span id="sync-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span id="sync-text">ยังไม่ตั้งค่าซิงค์</span>
+                </button>
+                <div class="text-right hidden sm:block">
+                    <p class="text-xs text-slate-400">ผู้ใช้งานปัจจุบัน</p>
+                    <p id="current-user-display" class="text-sm font-semibold text-amber-400">Operator</p>
+                </div>
+                <button onclick="openLoginModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium flex items-center gap-2 transition">
+                    <i class="fa-solid fa-user-gear text-amber-400"></i> เปลี่ยนผู้ใช้
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-3 sm:px-6 py-6 flex-grow w-full">
+
+        <!-- Top Controls & Action Bar -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-6 no-print flex flex-wrap justify-between items-center gap-4">
+            
+            <!-- Date Picker & Boiler Status -->
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                        <i class="fa-regular fa-calendar-days text-amber-600"></i> วันที่ตรวจสอบ:
+                    </label>
+                    <input type="date" id="inspection-date" onchange="loadDateData()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                </div>
+                <div class="bg-amber-50 text-amber-900 border border-amber-200 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                    กำลังบันทึก: <span id="active-boiler-tag">บอยเลอร์ 1</span>
+                </div>
+                <label class="flex items-center gap-2 text-xs font-medium text-slate-700 border border-slate-200 rounded-lg px-3 py-2 bg-white">
+                    <input type="checkbox" id="include-steam-trap" class="accent-amber-500">
+                    ตรวจสตีมแทร๊ปร่วมในวันนี้
+                </label>
+                <button type="button" id="open-steam-trap" onclick="openSteamTrapReport()" class="hidden bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-2 rounded-lg text-xs font-semibold">
+                    เปิดแบบตรวจสตีมแทร๊ป
+                </button>
+                <label class="flex items-center gap-2 text-xs font-medium text-slate-700 border border-slate-200 rounded-lg px-3 py-2 bg-white">
+                    <input type="checkbox" id="include-ph" class="accent-amber-500">
+                    ตรวจค่า pH ร่วมในเดือนนี้
+                </label>
+                <button type="button" id="open-ph-report" onclick="openPhReport()" class="hidden bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-2 rounded-lg text-xs font-semibold">
+                    เปิดแบบบันทึก pH
+                </button>
+            </div>
+
+            <!-- View Modes & Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+                <label for="form-selector" class="text-xs font-semibold text-slate-600">เลือกแบบฟอร์ม:</label>
+                <select id="form-selector" onchange="selectInspectionForm(this.value)" class="border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    <option value="daily">FM-001 ตรวจสอบบอยเลอร์ประจำวัน</option>
+                    <option value="steam-trap">FM-002 ตรวจเช็คสตีมแทร๊ป (เปิดแท็บใหม่)</option>
+                    <option value="ph">FM-004 บันทึกตรวจเช็คค่า pH (เปิดแท็บใหม่)</option>
+                </select>
+                <!-- View Mode Selector -->
+                <div class="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 text-xs font-medium">
+                    <button onclick="switchView('cards')" id="view-btn-cards" class="px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-800 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-grip"></i> การ์ดรายชั่วโมง
+                    </button>
+                    <button onclick="switchView('table')" id="view-btn-table" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                        <i class="fa-solid fa-table-cells"></i> ตารางแบบฟอร์ม (23 ข้อ)
+                    </button>
+                    <button onclick="switchView('chart')" id="view-btn-chart" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                        <i class="fa-solid fa-chart-line"></i> กราฟแนวโน้ม
+                    </button>
+                    <button onclick="switchView('efficiency')" id="view-btn-efficiency" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                        <i class="fa-solid fa-fire-flame-curved"></i> ประสิทธิภาพเตา
+                    </button>
+                </div>
+
+                <!-- Export & Print Actions -->
+                <div class="flex items-center gap-2 ml-auto sm:ml-0">
+                    <div id="boiler-export-actions" class="flex items-center gap-2">
+                    <button onclick="exportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm transition">
+                        <i class="fa-solid fa-file-excel"></i> Excel
+                    </button>
+                    <button onclick="exportCSV()" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm transition">
+                        <i class="fa-solid fa-file-csv"></i> CSV
+                    </button>
+                    </div>
+                    <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm transition">
+                        <i class="fa-solid fa-print"></i> พิมพ์ / PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Spec Alert Box -->
+        <div id="spec-alert-banner" class="hidden mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm no-print">
+            <div class="flex items-start gap-3">
+                <i class="fa-solid fa-triangle-exclamation text-red-500 text-xl mt-0.5"></i>
+                <div>
+                    <h3 class="text-sm font-bold text-red-800">แจ้งเตือนพบข้อมูลผิดปกติออกนอก Spec!</h3>
+                    <p id="spec-alert-detail" class="text-xs text-red-700 mt-1">รายการบันทึกของช่วงเวลา มีค่าเกินเกณฑ์กำหนด โปรดตรวจสอบ</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Header (Visible only in Print Mode) -->
+        <div class="hidden print-only mb-4">
+            <div class="text-center border-b pb-2 mb-2">
+                <h1 class="text-xl font-bold">แบบฟอร์มการบันทึกการตรวจสอบประจำวันของหม้อไอน้ำ</h1>
+                <p class="text-sm">รหัสเอกสาร: LFB-BOS-FM-001 R.02</p>
+                <div class="flex justify-between text-xs mt-2">
+                    <span><strong>หมายเลขบอยเลอร์:</strong> <span id="print-boiler-num">บอยเลอร์ 1</span></span>
+                    <span><strong>ประจำวันที่:</strong> <span id="print-date"></span></span>
+                    <span><strong>หัวหน้าแผนกผู้ทวนสอบ:</strong> นายไพรคีรี</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 1: Hourly Cards Mode -->
+        <div id="view-cards-container" class="space-y-6">
+            <div class="flex justify-between items-center no-print">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-clock text-amber-600"></i> บันทึกข้อมูลแยกรายชั่วโมง (24 ช่วงเวลา)
+                </h2>
+                <div class="flex items-center gap-2">
+                    <label for="hour-select" class="text-xs font-semibold text-slate-600">เลือกช่วงเวลา:</label>
+                    <select id="hour-select" onchange="jumpToHourCard()" class="border border-slate-300 rounded-lg px-2.5 py-1 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                        <!-- Hour options dynamically generated -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Cards Container -->
+            <div id="cards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Generated dynamically via JS -->
+            </div>
+        </div>
+
+        <!-- VIEW 2: Full Table (Official Layout 23 Items) -->
+        <div id="view-table-container" class="hidden space-y-4">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+                <div class="flex justify-between items-center mb-3 no-print">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-table text-amber-600"></i> ตารางแบบฟอร์มลงบันทึกการตรวจสอบ LFB-BOS-FM-001 R.02 (23 ข้อ)
+                    </h2>
+                    <span class="text-xs text-slate-500">เลื่อนแถบเพื่อดูข้อมูลครบทั้ง 23 คอลัมน์</span>
+                </div>
+
+                <div class="table-scroll overflow-x-auto border border-slate-200 rounded-xl">
+                    <table class="w-full text-xs text-center border-collapse bg-white whitespace-nowrap" id="official-table">
+                        <thead>
+                            <!-- Header Row 1 -->
+                            <tr class="bg-slate-800 text-white font-medium border-b border-slate-700">
+                                <th class="p-2 border-r border-slate-700 sticky left-0 bg-slate-800 z-10" rowspan="2">เวลา<br>(ช.ม.)</th>
+                                <th class="p-2 border-r border-slate-700 min-w-[90px]" rowspan="2">ความดันไอน้ำ<br>(7-10 บาร์)</th>
+                                <th class="p-2 border-r border-slate-700 min-w-[70px]" rowspan="2">ระดับน้ำ<br>หลอดแก้ว</th>
+                                <th class="p-2 border-r border-slate-700 bg-slate-700" colspan="5">ความดันปั๊มน้ำ (บาร์)</th>
+                                <th class="p-2 border-r border-slate-700 bg-slate-700" colspan="4">อุณหภูมิ (°C)</th>
+                                <th class="p-2 border-r border-slate-700 bg-slate-700" colspan="4">ระดับน้ำบ่อพักน้ำประปา</th>
+                                <th class="p-2 border-r border-slate-700 min-w-[90px]" rowspan="2">มิเตอร์น้ำ<br>(คิวสะสม)</th>
+                                <th class="p-2 border-r border-slate-700 bg-slate-700" colspan="9">Flow Meter Steam</th>
+                                <th class="p-2 border-r border-slate-700 min-w-[110px]" rowspan="2">ผู้ตรวจสอบ<br>(Operator)</th>
+                                <th class="p-2 min-w-[100px] no-print" rowspan="2">จัดการ</th>
+                            </tr>
+                            <!-- Header Row 2 -->
+                            <tr class="bg-slate-700 text-slate-200 font-medium text-[11px] border-b border-slate-600">
+                                <!-- ความดันปั๊มน้ำ -->
+                                <th class="p-1.5 border-r border-slate-600 min-w-[70px]">เข้าหม้อ<br><span class="text-[10px] font-normal text-slate-300">Spec: 9-14.5 บาร์</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[75px]">Condensate<br><span class="text-[10px] font-normal text-slate-300">Spec: 0.5-2.5 บาร์</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[80px]">Wet Scrubber<br><span class="text-[10px] font-normal text-slate-300">Spec: 1-2 บาร์</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[70px]">Storage<br><span class="text-[10px] font-normal text-slate-300">Spec: 1-3 บาร์</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[70px]">เข้า Soft<br><span class="text-[10px] font-normal text-slate-300">Spec: 1-4 บาร์</span></th>
+                                <!-- อุณหภูมิ -->
+                                <th class="p-1.5 border-r border-slate-600 min-w-[70px]">เข้าหม้อ<br><span class="text-[10px] font-normal text-slate-300">Spec: 40-120 °C</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[90px]">ปล่อง<br><span class="text-[10px] font-normal text-slate-300">Spec: 100-240 °C</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[75px]">Condensate<br><span class="text-[10px] font-normal text-slate-300">Spec: 40-100 °C</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[70px]">ดิแอร์<br><span class="text-[10px] font-normal text-slate-300">Spec: 40-120 °C</span></th>
+                                <!-- ระดับน้ำบ่อพัก -->
+                                <th class="p-1.5 border-r border-slate-600 min-w-[50px]">High</th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[50px]">Med</th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[50px]">Low</th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[80px]">Siren Alarm</th>
+                                <!-- Flow Meter -->
+                                <th class="p-1.5 border-r border-slate-600 min-w-[75px]">ISOWA เลขมิเตอร์</th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[65px]">ISOWA ใช้<br><span class="text-[10px] font-normal text-slate-300">ตัน/ชม.</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[65px]">ISOWA เฉลี่ย<br><span class="text-[10px] font-normal text-slate-300">ตัน/ชม.</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[75px]">BHS เลขมิเตอร์</th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[65px]">BHS ใช้<br><span class="text-[10px] font-normal text-slate-300">ตัน/ชม.</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[65px]">BHS เฉลี่ย<br><span class="text-[10px] font-normal text-slate-300">ตัน/ชม.</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[75px]">YUELI เลขมิเตอร์</th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[65px]">YUELI ใช้<br><span class="text-[10px] font-normal text-slate-300">ตัน/ชม.</span></th>
+                                <th class="p-1.5 border-r border-slate-600 min-w-[65px]">YUELI เฉลี่ย<br><span class="text-[10px] font-normal text-slate-300">ตัน/ชม.</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="official-table-body" class="divide-y divide-slate-200">
+                            <!-- Generated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 3: Trend Charts -->
+        <div id="view-chart-container" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Steam Pressure Chart -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-gauge-high text-amber-500"></i> แนวโน้มความดันไอน้ำ (Spec: 7 - 10 บาร์)
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chart-pressure"></canvas>
+                    </div>
+                </div>
+
+                <!-- Temperature Chart -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-temperature-three-quarters text-red-500"></i> แนวโน้มอุณหภูมิปล่องและเข้าหม้อ (°C)
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chart-temp"></canvas>
+                    </div>
+                </div>
+
+                <!-- Water Pump Pressure Chart -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2">
+                    <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-water text-blue-500"></i> แนวโน้มความดันปั๊มน้ำต่าง ๆ (บาร์)
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chart-pump"></canvas>
+                    </div>
+                </div>
+
+                <!-- Estimated Coal Consumption Chart -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2">
+                    <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-fire text-stone-600"></i> แนวโน้มการสิ้นเปลืองถ่านหินรายชั่วโมง (กก./ชั่วโมง)
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-3">คำนวณแยกแต่ละเครื่องจากปริมาณไอน้ำที่ใช้ × 215 กก./ตันไอน้ำ</p>
+                    <div class="h-64 relative">
+                        <canvas id="chart-coal"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 4: Boiler Efficiency -->
+        <div id="view-efficiency-container" class="hidden space-y-6">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-950">
+                <p class="font-semibold"><i class="fa-solid fa-circle-info mr-1"></i> ประสิทธิภาพความร้อนหม้อไอน้ำ</p>
+                <p class="mt-1">ถ่านหินประมาณการ (กก./วัน) = ไอน้ำรวม (ตัน/วัน) × 215 กก./ตันไอน้ำ</p>
+                <p class="mt-1">ประสิทธิภาพ (%) = มวลไอน้ำ × (Enthalpy ไอน้ำ − Enthalpy น้ำป้อน) ÷ (ถ่านหินประมาณการ × LHV) × 100</p>
+                <p class="mt-1">มวลไอน้ำรวมจาก ISOWA + BHS + YUELI · LHV ถ่านหิน AR 3,800 kcal/kg = 17,584 kJ/kg</p>
+                <p class="mt-1">ค่าประจำเครื่อง: B1 8 bar/น้ำป้อน 95°C, B2 และ B3 8 bar/น้ำป้อน 95°C</p>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <p class="text-xs font-semibold text-slate-700">อัตราคำนวณถ่านหิน</p>
+                <p class="text-sm text-amber-800 font-bold mt-1">215 กก. ต่อไอน้ำ 1 ตัน</p>
+                <p class="text-[11px] text-slate-500 mt-1">ระบบคำนวณปริมาณถ่านหินจากยอดไอน้ำรวมรายวันโดยอัตโนมัติ</p>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-3">
+                <label for="efficiency-month-filter" class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <i class="fa-regular fa-calendar-days text-amber-600"></i> เลือกเดือนที่ต้องการดู:
+                </label>
+                <input type="month" id="efficiency-month-filter" onchange="changeEfficiencyMonth(this.value)" class="border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">ไอน้ำรวมวันนี้</p>
+                    <p id="efficiency-daily-steam" class="text-lg font-bold text-slate-800">-</p>
+                    <p class="text-[11px] text-slate-500">ตัน/วัน</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">ถ่านหินประมาณการวันนี้</p>
+                    <p id="efficiency-daily-coal" class="text-lg font-bold text-amber-700">-</p>
+                    <p class="text-[11px] text-slate-500">กก./วัน</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">ไอน้ำรวมเดือนที่เลือก</p>
+                    <p id="efficiency-monthly-steam" class="text-lg font-bold text-slate-800">-</p>
+                    <p class="text-[11px] text-slate-500">ตัน/เดือน จากวันที่มีข้อมูล</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">ถ่านหินประมาณการเดือนที่เลือก</p>
+                    <p id="efficiency-monthly-coal" class="text-lg font-bold text-amber-700">-</p>
+                    <p class="text-[11px] text-slate-500">กก./เดือน เฉพาะวันที่บันทึก</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">ประสิทธิภาพวันนี้</p>
+                    <p id="efficiency-daily-percent" class="text-lg font-bold text-emerald-700">-</p>
+                    <p class="text-[11px] text-slate-500">เปอร์เซ็นต์</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">ประสิทธิภาพเดือนที่เลือก</p>
+                    <p id="efficiency-monthly-percent" class="text-lg font-bold text-emerald-700">-</p>
+                    <p class="text-[11px] text-slate-500">เปอร์เซ็นต์ จากวันที่ข้อมูลครบ</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">พลังงานไอน้ำวันนี้</p>
+                    <p id="efficiency-daily-steam-energy" class="text-lg font-bold text-sky-700">-</p>
+                    <p class="text-[11px] text-slate-500">Gcal/วัน</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-xs text-slate-500">พลังงานถ่านหินวันนี้</p>
+                    <p id="efficiency-daily-coal-energy" class="text-lg font-bold text-orange-700">-</p>
+                    <p class="text-[11px] text-slate-500">Gcal/วัน (LHV 17,584 kJ/kg)</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-1">พลังงานไอน้ำเทียบถ่านหินรายวัน</h3>
+                    <p class="text-xs text-slate-500 mb-3" id="efficiency-daily-title"></p>
+                    <div class="h-72 relative"><canvas id="chart-efficiency-daily"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-1">แนวโน้มประสิทธิภาพรายวันในเดือนที่เลือก</h3>
+                    <p class="text-xs text-slate-500 mb-3" id="efficiency-monthly-title"></p>
+                    <div class="h-72 relative"><canvas id="chart-efficiency-monthly"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blow Down, Remarks & Sign-off Section -->
+        <div id="boiler-extra-sections" class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Blow Down Section -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-800 border-b pb-2 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-filter text-amber-600"></i> การบันทึกการโบล์วดาวน์ (Blow Down)
+                </h3>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">โบล์วดาวน์หลอดแก้ว:</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" id="bd-glass-m" class="rounded text-amber-600 focus:ring-amber-500" onchange="saveExtraData()"> กะเช้า (M)
+                            </label>
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" id="bd-glass-e" class="rounded text-amber-600 focus:ring-amber-500" onchange="saveExtraData()"> กะดึก (E)
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">โบล์วดาวน์ตัวหม้อไอน้ำ (Main Blowdown):</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" id="bd-boiler-m" class="rounded text-amber-600 focus:ring-amber-500" onchange="saveExtraData()"> กะเช้า (M)
+                            </label>
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" id="bd-boiler-e" class="rounded text-amber-600 focus:ring-amber-500" onchange="saveExtraData()"> กะดึก (E)
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">โบล์วดาวน์บ่อพักดิแอร์ (Deaerator):</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" id="bd-deaerator-m" class="rounded text-amber-600 focus:ring-amber-500" onchange="saveExtraData()"> กะเช้า (M)
+                            </label>
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" id="bd-deaerator-e" class="rounded text-amber-600 focus:ring-amber-500" onchange="saveExtraData()"> กะดึก (E)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Remarks Section -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-800 border-b pb-2 mb-3 flex items-center gap-2">
+                    <i class="fa-regular fa-comment-dots text-amber-600"></i> หมายเหตุ / บันทึกความผิดปกติ (Remarks)
+                </h3>
+                <textarea id="daily-remarks" rows="5" onchange="saveExtraData()" placeholder="ระบุเหตุการณ์ผิดปกติ การบำรุงรักษา หรือข้อสังเกตประจำวัน..." class="w-full border border-slate-300 rounded-xl p-2.5 text-xs text-slate-700 focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
+            </div>
+
+            <!-- Verification / Sign-off Section -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 border-b pb-2 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-file-signature text-amber-600"></i> การทวนสอบเอกสาร (Sign-off)
+                    </h3>
+                    
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 text-xs space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-500">หัวหน้าแผนก Boiler:</span>
+                            <span class="font-bold text-slate-800">นายไพรคีรี</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-500">สถานะการทวนสอบ:</span>
+                            <span id="signoff-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                                รอการทวนสอบ
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center text-[11px] text-slate-500">
+                            <span>วันที่/เวลา อนุมัติ:</span>
+                            <span id="signoff-time-display">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <button id="btn-signoff" onclick="toggleSignoff()" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm">
+                        <i class="fa-solid fa-signature text-amber-400"></i> ลงนามทวนสอบ (นายไพรคีรี)
+                    </button>
+                    <p class="text-[10px] text-slate-400 text-center mt-2">* ต้องเข้าสู่ระบบในบทบาทหัวหน้างาน (นายไพรคีรี) เพื่อทวนสอบ</p>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print mt-auto">
+        <p>ระบบบันทึกการตรวจสอบประจำวันของหม้อไอน้ำ (Daily Boiler Inspection System) - LFB-BOS-FM-001 R.02</p>
+        <p class="text-[10px] text-slate-400 mt-0.5">รองรับผู้ตรวจสอบ: สมศักดิ์, ชมพู, วสันต์, ชรัณย์ | หัวหน้าแผนก: นายไพรคีรี</p>
+    </footer>
+
+    <!-- User Login Switch Modal -->
+    <!-- Sync Settings Modal -->
+    <div id="sync-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+            <h3 class="text-base font-bold text-slate-800 mb-1">ซิงค์ข้อมูลกับ Google Sheets</h3>
+            <p class="text-xs text-slate-500 mb-4">ใส่ URL ของ Web App และรหัสผ่านที่ตั้งไว้ในสคริปต์ (ตั้งครั้งเดียวต่อเครื่อง)</p>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Web App URL</label>
+            <input id="sync-url" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-3">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">รหัสผ่านซิงค์ (TOKEN)</label>
+            <input id="sync-token" type="password" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-4">
+            <p id="sync-msg" class="text-xs mb-3 break-words hidden"></p>
+            <div class="flex flex-wrap justify-end gap-2">
+                <button onclick="closeSyncModal()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-700">ปิด</button>
+                <button onclick="syncNow()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-700">ซิงค์ตอนนี้</button>
+                <button onclick="saveSyncSettings()" class="px-3 py-2 text-sm rounded-lg bg-amber-500 text-slate-950 font-semibold">บันทึกและเชื่อมต่อ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-5 animate-fade-in">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-users-gear text-amber-600"></i> สลับผู้ใช้งาน / เข้าสู่ระบบ
+                </h3>
+                <button onclick="closeLoginModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Role Selector -->
+            <div class="space-y-3">
+                <label class="block text-xs font-semibold text-slate-700">1. เลือกระดับสิทธิ์ (Role):</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <button type="button" onclick="selectRole('operator')" id="role-btn-operator" class="p-3 border-2 border-amber-500 bg-amber-50/50 rounded-xl text-left transition flex flex-col gap-1">
+                        <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-user text-amber-600"></i> พนักงาน (Operator)
+                        </span>
+                        <span class="text-[10px] text-slate-500">บันทึกข้อมูลประจำชั่วโมง</span>
+                    </button>
+                    <button type="button" onclick="selectRole('supervisor')" id="role-btn-supervisor" class="p-3 border border-slate-200 rounded-xl text-left transition flex flex-col gap-1 hover:border-slate-300">
+                        <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-user-shield text-slate-700"></i> หัวหน้างาน (Supervisor)
+                        </span>
+                        <span class="text-[10px] text-slate-500">ทวนสอบและลงนามรับรอง</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- User Name Selector -->
+            <div class="space-y-3">
+                <label for="login-password" class="block text-xs font-semibold text-slate-700">2. ใส่รหัสผ่าน:</label>
+                <div class="space-y-1">
+                    <input type="password" id="login-password" inputmode="numeric" maxlength="4" autocomplete="current-password" onkeydown="if (event.key === 'Enter') confirmLogin()" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="รหัสผ่าน">
+                    <p class="text-[10px] text-slate-400">ใส่รหัสผ่านตามระดับสิทธิ์ที่เลือก</p>
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-end gap-2">
+                <button type="button" onclick="closeLoginModal()" class="px-4 py-2 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50">ยกเลิก</button>
+                <button type="button" onclick="confirmLogin()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-sm">ยืนยันเข้าสู่ระบบ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit/Add Entry Modal -->
+    <div id="entry-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-5xl w-full p-6 space-y-4 my-8">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-amber-600"></i> บันทึกข้อมูลช่วงเวลา: <span id="modal-hour-title" class="text-amber-600">08:00</span>
+                </h3>
+                <button onclick="closeEntryModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="entry-form" onsubmit="saveEntryForm(event)" class="space-y-4">
+                <input type="hidden" id="modal-hour-index">
+
+                <!-- Parameters Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                    
+                    <!-- 1. ความดันไอน้ำ -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ความดันไอน้ำ (7-10 บาร์):</label>
+                        <input type="number" step="0.1" id="m-steam-press" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 2. ระดับน้ำหลอดแก้ว -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ระดับน้ำหลอดแก้ว:</label>
+                        <select id="m-glass-level" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            <option value="ปกติ">ปกติ (✓)</option>
+                            <option value="ผิดปกติ">ผิดปกติ (✗)</option>
+                        </select>
+                    </div>
+
+                    <!-- 3. ความดันปั๊มน้ำเข้าหม้อ -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ดันปั๊มน้ำเข้าหม้อ (บาร์):</label>
+                        <input type="number" step="0.1" id="m-p-boiler" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 4. ความดัน Condensate -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ดัน Condensate (บาร์):</label>
+                        <input type="number" step="0.1" id="m-p-condensate" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 5. ความดัน Wet Scrubber -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ดัน Wet Scrubber (บาร์):</label>
+                        <input type="number" step="0.1" id="m-p-scrubber" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 6. ความดัน Storage -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ดัน Storage (บาร์):</label>
+                        <input type="number" step="0.1" id="m-p-storage" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 7. ความดัน เข้า Soft -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">ดัน เข้า Soft (บาร์):</label>
+                        <input type="number" step="0.1" id="m-p-soft" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 8. อุณหภูมิน้ำเข้าหม้อ -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">อุณหภูมิน้ำเข้าหม้อ (°C):</label>
+                        <input type="number" step="0.1" id="m-t-boiler" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 9. อุณหภูมิปล่อง -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">อุณหภูมิปล่อง (100-240°C):</label>
+                        <input type="number" step="0.1" id="m-t-stack" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 10. อุณหภูมิ Condensate -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">Temp Condensate (°C):</label>
+                        <input type="number" step="0.1" id="m-t-condensate" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 11. อุณหภูมิ ดิแอร์ -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">Temp ดิแอร์ (°C):</label>
+                        <input type="number" step="0.1" id="m-t-deaerator" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                    <!-- 12. ระดับน้ำ High -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">น้ำบ่อพัก High:</label>
+                        <select id="m-w-high" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            <option value="✓">มี (✓)</option>
+                            <option value="-">-</option>
+                        </select>
+                    </div>
+
+                    <!-- 13. ระดับน้ำ Med -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">น้ำบ่อพัก Med:</label>
+                        <select id="m-w-med" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            <option value="✓">มี (✓)</option>
+                            <option value="-">-</option>
+                        </select>
+                    </div>
+
+                    <!-- 14. ระดับน้ำ Low -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">น้ำบ่อพัก Low:</label>
+                        <select id="m-w-low" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            <option value="✓">มี (✓)</option>
+                            <option value="-">-</option>
+                        </select>
+                    </div>
+
+                    <!-- 15. Siren Alarm -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">Siren Alarm:</label>
+                        <select id="m-w-siren" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            <option value="ปกติ">ปกติ</option>
+                            <option value="ดังเตือน">ดังเตือน (!)</option>
+                        </select>
+                    </div>
+
+                    <!-- 16. มิเตอร์น้ำ -->
+                    <div class="space-y-1">
+                        <label class="font-semibold text-slate-700">มิเตอร์น้ำ (คิว):</label>
+                        <input type="number" step="1" id="m-water-meter" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    </div>
+
+                </div>
+
+                <section class="border border-amber-200 bg-amber-50/50 rounded-xl p-3 space-y-3">
+                    <h4 class="text-sm font-bold text-amber-900 flex items-center gap-2">
+                        <i class="fa-solid fa-gauge-high text-amber-600"></i> บันทึกมิเตอร์สตีมรายชั่วโมง
+                    </h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                        <div class="border border-slate-200 bg-white rounded-lg p-3 space-y-2">
+                            <h5 class="font-bold text-slate-800">ISOWA</h5>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">ตัวเลขมิเตอร์:</label>
+                                <input type="number" step="any" id="m-f-isowa-meter" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">ใช้ (ตัน/ชั่วโมง):</label>
+                                <input type="number" step="0.01" id="m-f-isowa-use" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">เฉลี่ย (ตัน/ชั่วโมง):</label>
+                                <input type="number" step="0.01" id="m-f-isowa-avg" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div class="border border-slate-200 bg-white rounded-lg p-3 space-y-2">
+                            <h5 class="font-bold text-slate-800">BHS</h5>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">ตัวเลขมิเตอร์:</label>
+                                <input type="number" step="any" id="m-f-bhs-meter" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">ใช้ (ตัน/ชั่วโมง):</label>
+                                <input type="number" step="0.01" id="m-f-bhs-use" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">เฉลี่ย (ตัน/ชั่วโมง):</label>
+                                <input type="number" step="0.01" id="m-f-bhs-avg" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div class="border border-slate-200 bg-white rounded-lg p-3 space-y-2">
+                            <h5 class="font-bold text-slate-800">YUELI</h5>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">ตัวเลขมิเตอร์:</label>
+                                <input type="number" step="any" id="m-f-yueli-meter" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">ใช้ (ตัน/ชั่วโมง):</label>
+                                <input type="number" step="0.01" id="m-f-yueli-use" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-semibold text-slate-700">เฉลี่ย (ตัน/ชั่วโมง):</label>
+                                <input type="number" step="0.01" id="m-f-yueli-avg" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Operator Name Option in Form -->
+                <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
+                    <label for="modal-operator-name" class="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-check text-amber-600"></i> ผู้บันทึก/ผู้ตรวจ:
+                    </label>
+                    <select id="modal-operator-name" class="border border-amber-300 rounded-lg px-3 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                        <option value="สมศักดิ์">สมศักดิ์</option>
+                        <option value="ชมพู">ชมพู</option>
+                        <option value="วสันต์">วสันต์</option>
+                        <option value="ชรัณย์">ชรัณย์</option>
+                    </select>
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeEntryModal()" class="px-4 py-2 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50">ยกเลิก</button>
+                    <button type="submit" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-sm">บันทึกข้อมูล</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Application Logic Script -->
+    <script>
+        // Hours Master List (24 Hours)
+        const HOURS = [
+            "08:00", "09:00", "10:00", "11:00", "12:00", "13:00",
+            "14:00", "15:00", "16:00", "17:00", "18:00", "19:00",
+            "20:00", "21:00", "22:00", "23:00", "00:00", "01:00",
+            "02:00", "03:00", "04:00", "05:00", "06:00", "07:00"
+        ];
+        const COAL_KG_PER_STEAM_TON = 215;
+        const COAL_LHV_KJ_PER_KG = 17584;
+        const KJ_PER_GCAL = 4184000;
+        const BOILER_EFFICIENCY_PARAMS = {
+            1: { steamPressureBar: 8, steamEnthalpyKjKg: 2778.1, feedwaterTempC: 90, feedwaterEnthalpyKjKg: 376 },
+            2: { steamPressureBar: 8, steamEnthalpyKjKg: 2778.1, feedwaterTempC: 95, feedwaterEnthalpyKjKg: 398 },
+            3: { steamPressureBar: 8, steamEnthalpyKjKg: 2778.1, feedwaterTempC: 95, feedwaterEnthalpyKjKg: 398 }
+        };
+
+        // Operators List
+        const OPERATORS = ["สมศักดิ์", "ชมพู", "วสันต์", "ชรัณย์"];
+        const SUPERVISOR_NAME = "นายไพรคีรี";
+
+        // Application State
+        let currentBoiler = 1;
+        let currentDate = new Date().toISOString().split('T')[0];
+        let currentEfficiencyMonth = currentDate.slice(0, 7);
+        let currentRole = 'operator'; // 'operator' or 'supervisor'
+        let currentUser = 'สมศักดิ์';
+        let currentView = 'cards'; // 'cards', 'table', 'chart', 'efficiency'
+
+        // Charts instances
+        let chartPressure = null;
+        let chartTemp = null;
+        let chartPump = null;
+        let chartCoal = null;
+        let chartEfficiencyDaily = null;
+        let chartEfficiencyMonthly = null;
+
+        // On Document Ready
+        window.onload = function() {
+            // Set initial date in input
+            document.getElementById('inspection-date').value = currentDate;
+            document.getElementById('print-date').innerText = currentDate;
+            document.getElementById('efficiency-month-filter').value = currentEfficiencyMonth;
+
+            // Populate Hour Dropdown
+            const hourSelect = document.getElementById('hour-select');
+            HOURS.forEach((h, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.textContent = `${h} น.`;
+                hourSelect.appendChild(opt);
+            });
+
+            // Load initial data
+            loadDateData();
+            updateUserUI();
+            document.getElementById('include-steam-trap').addEventListener('change', saveSteamTrapSelection);
+            document.getElementById('include-ph').addEventListener('change', savePhSelection);
+        };
+
+        // Switch Active Boiler (1, 2, 3)
+        function switchBoiler(num) {
+            currentBoiler = num;
+            
+            // Update Tab UI
+            [1, 2, 3].forEach(n => {
+                const btn = document.getElementById(`btn-boiler-${n}`);
+                if (n === num) {
+                    btn.className = "px-3.5 py-1.5 text-xs md:text-sm font-medium rounded-lg transition-all flex items-center gap-2 bg-amber-500 text-slate-950 font-semibold shadow";
+                } else {
+                    btn.className = "px-3.5 py-1.5 text-xs md:text-sm font-medium text-slate-300 rounded-lg hover:text-white transition-all flex items-center gap-2";
+                }
+            });
+
+            document.getElementById('active-boiler-tag').innerText = `บอยเลอร์ ${num}`;
+            document.getElementById('print-boiler-num').innerText = `บอยเลอร์ ${num}`;
+
+            loadDateData();
+        }
+
+        // Generate Key for LocalStorage
+        function getStorageKey() {
+            return `boiler_data_b${currentBoiler}_${currentDate}`;
+        }
+
+        // Get Data for Current Date & Boiler
+        function getData() {
+            const key = getStorageKey();
+            const raw = localStorage.getItem(key);
+            if (raw) {
+                return JSON.parse(raw);
+            } else {
+                // Initialize Default Mock / Blank Data Structure
+                return createInitialData();
+            }
+        }
+
+        function createInitialData() {
+            const entries = HOURS.map((h, index) => {
+                // Pre-fill some default realistic mock numbers
+                const press = (8.0 + (Math.sin(index) * 0.8)).toFixed(1);
+                const stackT = (180 + (Math.cos(index) * 20)).toFixed(1);
+                const assignedOp = OPERATORS[index % OPERATORS.length];
+
+                return {
+                    hour: h,
+                    steam_press: parseFloat(press),
+                    glass_level: "ปกติ",
+                    p_boiler: 12.5,
+                    p_condensate: 3.2,
+                    p_scrubber: 2.1,
+                    p_storage: 4.0,
+                    p_soft: 3.5,
+                    t_boiler: 85.0,
+                    t_stack: parseFloat(stackT),
+                    t_condensate: 75.0,
+                    t_deaerator: 102.0,
+                    w_high: "✓",
+                    w_med: "✓",
+                    w_low: "-",
+                    w_siren: "ปกติ",
+                    water_meter: 12500 + (index * 4),
+                    f_isowa_use: 2.1,
+                    f_isowa_avg: 2.0,
+                    f_isowa_meter: null,
+                    f_bhs_use: 1.8,
+                    f_bhs_avg: 1.8,
+                    f_bhs_meter: null,
+                    f_yueli_use: 1.5,
+                    f_yueli_avg: 1.4,
+                    f_yueli_meter: null,
+                    operator: assignedOp
+                };
+            });
+
+            return {
+                entries: entries,
+                blowdown: {
+                    glass_m: true, glass_e: false,
+                    boiler_m: true, boiler_e: true,
+                    deaerator_m: true, deaerator_e: false
+                },
+                remarks: "",
+                signoff: {
+                    isSigned: false,
+                    supervisor: SUPERVISOR_NAME,
+                    signedAt: null
+                }
+            };
+        }
+
+        // Save Data to LocalStorage
+        function saveData(data) {
+            stampChanges(data);
+            localStorage.setItem(getStorageKey(), JSON.stringify(data));
+            checkSpecAlerts(data);
+            queueRemoteSave(currentBoiler, currentDate);
+        }
+
+        // Load Data when Date or Boiler changes
+        function loadDateData() {
+            currentDate = document.getElementById('inspection-date').value;
+            document.getElementById('print-date').innerText = currentDate;
+
+            const data = getData();
+            renderCardsView(data);
+            renderTableView(data);
+            renderCharts(data);
+            renderExtraSections(data);
+            loadSteamTrapSelection();
+            loadPhSelection();
+            checkSpecAlerts(data);
+            if (currentView === 'efficiency') renderEfficiencyCharts(data);
+            pullRemoteDay(currentBoiler, currentDate);
+        }
+
+        function getSteamTrapSelectionKey() {
+            return `steam_trap_included_b${currentBoiler}_${currentDate}`;
+        }
+
+        function loadSteamTrapSelection() {
+            const included = localStorage.getItem(getSteamTrapSelectionKey()) === 'true';
+            document.getElementById('include-steam-trap').checked = included;
+            document.getElementById('open-steam-trap').classList.toggle('hidden', !included);
+        }
+
+        function saveSteamTrapSelection() {
+            const included = document.getElementById('include-steam-trap').checked;
+            localStorage.setItem(getSteamTrapSelectionKey(), String(included));
+            document.getElementById('open-steam-trap').classList.toggle('hidden', !included);
+        }
+
+        function openSteamTrapReport() {
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'select-inspection-form', form: 'steam-trap' }, '*');
+                return;
+            }
+            window.location.href = 'steam_trap_inspection.html';
+        }
+
+        function getPhSelectionKey() {
+            return `ph_report_included_b${currentBoiler}_${currentDate.slice(0, 7)}`;
+        }
+
+        function loadPhSelection() {
+            const included = localStorage.getItem(getPhSelectionKey()) === 'true';
+            document.getElementById('include-ph').checked = included;
+            document.getElementById('open-ph-report').classList.toggle('hidden', !included);
+        }
+
+        function savePhSelection() {
+            const included = document.getElementById('include-ph').checked;
+            localStorage.setItem(getPhSelectionKey(), String(included));
+            document.getElementById('open-ph-report').classList.toggle('hidden', !included);
+        }
+
+        function openPhReport() {
+            const month = currentDate.slice(0, 7);
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'select-inspection-form', form: 'ph', month }, '*');
+                return;
+            }
+            window.location.href = `ph_inspection.html?month=${encodeURIComponent(month)}`;
+        }
+
+        function selectInspectionForm(form) {
+            if (form === 'steam-trap') {
+                document.getElementById('include-steam-trap').checked = true;
+                saveSteamTrapSelection();
+                openSteamTrapReport();
+            } else if (form === 'ph') {
+                document.getElementById('include-ph').checked = true;
+                savePhSelection();
+                openPhReport();
+            }
+            document.getElementById('form-selector').value = 'daily';
+        }
+
+        // Switch View Modes
+        function switchView(mode) {
+            currentView = mode;
+            document.getElementById('view-cards-container').classList.add('hidden');
+            document.getElementById('view-table-container').classList.add('hidden');
+            document.getElementById('view-chart-container').classList.add('hidden');
+            document.getElementById('view-efficiency-container').classList.add('hidden');
+
+            document.getElementById('view-btn-cards').className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1";
+            document.getElementById('view-btn-table').className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1";
+            document.getElementById('view-btn-chart').className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1";
+            document.getElementById('view-btn-efficiency').className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1";
+
+            if (mode === 'cards') {
+                document.getElementById('view-cards-container').classList.remove('hidden');
+                document.getElementById('view-btn-cards').className = "px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-800 font-semibold flex items-center gap-1";
+            } else if (mode === 'table') {
+                document.getElementById('view-table-container').classList.remove('hidden');
+                document.getElementById('view-btn-table').className = "px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-800 font-semibold flex items-center gap-1";
+            } else if (mode === 'chart') {
+                document.getElementById('view-chart-container').classList.remove('hidden');
+                document.getElementById('view-btn-chart').className = "px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-800 font-semibold flex items-center gap-1";
+                // Trigger chart refresh for correct canvas sizing
+                const data = getData();
+                renderCharts(data);
+            } else if (mode === 'efficiency') {
+                document.getElementById('view-efficiency-container').classList.remove('hidden');
+                document.getElementById('view-btn-efficiency').className = "px-3 py-1.5 rounded-lg bg-white shadow-sm text-slate-800 font-semibold flex items-center gap-1";
+                renderEfficiencyCharts(getData());
+                pullRemoteMonth(currentBoiler, currentEfficiencyMonth);
+            }
+        }
+
+        // Render Cards View
+        function renderCardsView(data) {
+            const container = document.getElementById('cards-grid');
+            container.innerHTML = '';
+
+            data.entries.forEach((item, index) => {
+                const isSteamOut = item.steam_press < 7.0 || item.steam_press > 10.0;
+                const isStackOut = item.t_stack < 100 || item.t_stack > 240;
+                const hasOut = isSteamOut || isStackOut;
+
+                const card = document.createElement('div');
+                card.id = `card-hour-${index}`;
+                card.className = `bg-white rounded-2xl p-4 border transition-all hover:shadow-md ${hasOut ? 'border-red-300 bg-red-50/20' : 'border-slate-200'}`;
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-center border-b pb-2 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="bg-amber-100 text-amber-900 font-bold px-2.5 py-1 rounded-lg text-xs flex items-center gap-1">
+                                <i class="fa-regular fa-clock"></i> ${item.hour} น.
+                            </span>
+                            ${hasOut ? '<span class="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">Spec Alert</span>' : ''}
+                        </div>
+                        <button onclick="openEntryModal(${index})" class="text-xs text-amber-600 hover:text-amber-800 font-semibold flex items-center gap-1 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition">
+                            <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-xs mb-3">
+                        <div class="bg-slate-50 p-2 rounded-xl ${isSteamOut ? 'out-of-spec' : ''}">
+                            <span class="text-slate-500 block text-[10px]">ความดันไอน้ำ (7-10)</span>
+                            <span class="font-bold text-sm">${item.steam_press ?? '-'}</span> <span class="text-[10px]">บาร์</span>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded-xl ${isStackOut ? 'out-of-spec' : ''}">
+                            <span class="text-slate-500 block text-[10px]">ปล่อง (100-240)</span>
+                            <span class="font-bold text-sm">${item.t_stack ?? '-'}</span> <span class="text-[10px]">°C</span>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded-xl">
+                            <span class="text-slate-500 block text-[10px]">หลอดแก้ว</span>
+                            <span class="font-semibold text-slate-800">${item.glass_level}</span>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded-xl">
+                            <span class="text-slate-500 block text-[10px]">มิเตอร์น้ำ</span>
+                            <span class="font-semibold text-slate-800">${item.water_meter ?? '-'}</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-end pt-2 border-t text-[11px] text-slate-500">
+                        <div class="flex items-center gap-1 self-center">
+                            <i class="fa-solid fa-user-pen text-slate-400"></i> ผู้ตรวจ: <strong class="text-slate-700">${item.operator || '-'}</strong>
+                        </div>
+                        <div class="text-right text-[11px] leading-tight font-medium text-slate-800">
+                            <div>ISOWA: มิเตอร์ ${item.f_isowa_meter ?? '-'} / ใช้ ${item.f_isowa_use ?? '-'} / เฉลี่ย ${item.f_isowa_avg ?? '-'} ตัน/ชม.</div>
+                            <div>BHS: มิเตอร์ ${item.f_bhs_meter ?? '-'} / ใช้ ${item.f_bhs_use ?? '-'} / เฉลี่ย ${item.f_bhs_avg ?? '-'} ตัน/ชม.</div>
+                            <div>YUELI: มิเตอร์ ${item.f_yueli_meter ?? '-'} / ใช้ ${item.f_yueli_use ?? '-'} / เฉลี่ย ${item.f_yueli_avg ?? '-'} ตัน/ชม.</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
             });
         }
 
-        document.querySelectorAll('[data-form]').forEach(button => {
-            button.addEventListener('click', () => selectForm(button.dataset.form));
-        });
+        // Render Official Table View
+        function renderTableView(data) {
+            const tbody = document.getElementById('official-table-body');
+            tbody.innerHTML = '';
 
-        forms.daily.addEventListener('load', () => {
-            forms.daily.contentWindow.postMessage({ type: 'get-sync-config' }, '*');
-        });
-        ['steam-trap', 'ph'].forEach(name => {
-            forms[name].addEventListener('load', () => {
-                if (syncSettings) forms[name].contentWindow.postMessage(syncSettings, '*');
+            data.entries.forEach((item, index) => {
+                const isSteamOut = item.steam_press < 7.0 || item.steam_press > 10.0;
+                const isStackOut = item.t_stack < 100 || item.t_stack > 240;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 text-slate-700 text-xs";
+
+                tr.innerHTML = `
+                    <td class="p-2 border-r border-slate-200 font-semibold bg-slate-50 sticky left-0">${item.hour}</td>
+                    <td class="p-2 border-r border-slate-200 ${isSteamOut ? 'out-of-spec' : ''}">${item.steam_press ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.glass_level}</td>
+                    <!-- ความดันปั๊ม -->
+                    <td class="p-2 border-r border-slate-200">${item.p_boiler ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.p_condensate ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.p_scrubber ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.p_storage ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.p_soft ?? '-'}</td>
+                    <!-- อุณหภูมิ -->
+                    <td class="p-2 border-r border-slate-200">${item.t_boiler ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200 ${isStackOut ? 'out-of-spec' : ''}">${item.t_stack ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.t_condensate ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.t_deaerator ?? '-'}</td>
+                    <!-- ระดับน้ำ -->
+                    <td class="p-2 border-r border-slate-200">${item.w_high}</td>
+                    <td class="p-2 border-r border-slate-200">${item.w_med}</td>
+                    <td class="p-2 border-r border-slate-200">${item.w_low}</td>
+                    <td class="p-2 border-r border-slate-200">${item.w_siren}</td>
+                    <!-- มิเตอร์น้ำ -->
+                    <td class="p-2 border-r border-slate-200">${item.water_meter ?? '-'}</td>
+                    <!-- Flow Steam -->
+                    <td class="p-2 border-r border-slate-200">${item.f_isowa_meter ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_isowa_use ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_isowa_avg ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_bhs_meter ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_bhs_use ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_bhs_avg ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_yueli_meter ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_yueli_use ?? '-'}</td>
+                    <td class="p-2 border-r border-slate-200">${item.f_yueli_avg ?? '-'}</td>
+                    <!-- ผู้ตรวจ -->
+                    <td class="p-2 border-r border-slate-200 font-medium text-amber-900">${item.operator || '-'}</td>
+                    <td class="p-2 no-print">
+                        <button onclick="openEntryModal(${index})" class="text-amber-600 hover:text-amber-800 font-semibold text-xs">
+                            <i class="fa-solid fa-pen"></i> แก้ไข
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
             });
-        });
+        }
 
-        window.addEventListener('message', event => {
-            const isChildFrame = Object.values(forms).some(frame => frame.contentWindow === event.source);
-            if (!isChildFrame || !event.data) return;
-            if (event.source === forms.daily.contentWindow && event.data.type === 'sync-config') {
-                syncSettings = event.data;
-                ['steam-trap', 'ph'].forEach(name => forms[name].contentWindow.postMessage(syncSettings, '*'));
+        // Render Charts using Chart.js
+        function renderCharts(data) {
+            const labels = data.entries.map(e => e.hour);
+            const steamPress = data.entries.map(e => e.steam_press);
+            const tStack = data.entries.map(e => e.t_stack);
+            const tBoiler = data.entries.map(e => e.t_boiler);
+            const pBoiler = data.entries.map(e => e.p_boiler);
+            const pCondensate = data.entries.map(e => e.p_condensate);
+            const coalUseByMachine = [
+                { label: 'ISOWA', field: 'f_isowa_use', color: '#d97706' },
+                { label: 'BHS', field: 'f_bhs_use', color: '#2563eb' },
+                { label: 'YUELI', field: 'f_yueli_use', color: '#059669' }
+            ].map(machine => ({
+                label: `${machine.label} ถ่านหิน (กก./ชั่วโมง)`,
+                data: data.entries.map(entry => {
+                    const steamUse = entry[machine.field];
+                    return steamUse === null || steamUse === undefined || steamUse === '' || !Number.isFinite(Number(steamUse))
+                        ? null
+                        : Number(steamUse) * COAL_KG_PER_STEAM_TON;
+                }),
+                borderColor: machine.color,
+                backgroundColor: machine.color,
+                tension: 0.3
+            }));
+
+            // Destroy existing if re-rendering
+            if (chartPressure) chartPressure.destroy();
+            if (chartTemp) chartTemp.destroy();
+            if (chartPump) chartPump.destroy();
+            if (chartCoal) chartCoal.destroy();
+
+            // 1. Steam Pressure Chart
+            const ctx1 = document.getElementById('chart-pressure').getContext('2d');
+            chartPressure = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'ความดันไอน้ำ (บาร์)',
+                            data: steamPress,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Spec Max (10 บาร์)',
+                            data: Array(24).fill(10),
+                            borderColor: '#ef4444',
+                            borderDash: [5, 5],
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Spec Min (7 บาร์)',
+                            data: Array(24).fill(7),
+                            borderColor: '#ef4444',
+                            borderDash: [5, 5],
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // 2. Temperature Chart
+            const ctx2 = document.getElementById('chart-temp').getContext('2d');
+            chartTemp = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'อุณหภูมิปล่อง (°C)',
+                            data: tStack,
+                            borderColor: '#dc2626',
+                            tension: 0.3
+                        },
+                        {
+                            label: 'อุณหภูมิน้ำเข้าหม้อ (°C)',
+                            data: tBoiler,
+                            borderColor: '#0284c7',
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // 3. Pump Pressure Chart
+            const ctx3 = document.getElementById('chart-pump').getContext('2d');
+            chartPump = new Chart(ctx3, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'ปั๊มเข้าหม้อ (บาร์)',
+                            data: pBoiler,
+                            borderColor: '#10b981',
+                            tension: 0.3
+                        },
+                        {
+                            label: 'ปั๊ม Condensate (บาร์)',
+                            data: pCondensate,
+                            borderColor: '#6366f1',
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // 4. Estimated hourly coal consumption from total steam use
+            const ctx4 = document.getElementById('chart-coal').getContext('2d');
+            chartCoal = new Chart(ctx4, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: coalUseByMachine
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'กก./ชั่วโมง'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function getSteamUseTotal(entry) {
+            const values = ['f_isowa_use', 'f_bhs_use', 'f_yueli_use']
+                .map(field => entry[field])
+                .filter(value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0)
+                .map(Number);
+
+            return values.length ? values.reduce((total, value) => total + value, 0) : null;
+        }
+
+        function getEfficiencyTotals(entries) {
+            const hourlySteam = entries.map(getSteamUseTotal);
+            const steamTonnes = hourlySteam.reduce((total, value) => total + (value ?? 0), 0);
+            const hasSteamData = hourlySteam.some(value => value !== null);
+
+            const coalKg = hasSteamData ? steamTonnes * COAL_KG_PER_STEAM_TON : null;
+            return { steamTonnes: hasSteamData ? steamTonnes : null, coalKg };
+        }
+
+        function calculateBoilerEfficiency(steamTonnes, coalKg) {
+            if (steamTonnes === null || steamTonnes <= 0 || coalKg === null || coalKg <= 0) return null;
+
+            const params = BOILER_EFFICIENCY_PARAMS[currentBoiler];
+            const steamEnergyKj = steamTonnes * 1000 * (params.steamEnthalpyKjKg - params.feedwaterEnthalpyKjKg);
+            const fuelEnergyKj = coalKg * COAL_LHV_KJ_PER_KG;
+            return steamEnergyKj / fuelEnergyKj * 100;
+        }
+
+        function getMonthEfficiencyData() {
+            const [year, month] = currentEfficiencyMonth.split('-').map(Number);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const labels = [];
+            const dailySteam = [];
+            const dailyCoal = [];
+            const dailyEfficiency = [];
+            let steamTonnes = 0;
+            let coalKg = 0;
+            let efficiencySteamTonnes = 0;
+            let efficiencyCoalKg = 0;
+            let daysWithSteam = 0;
+            let daysWithCoal = 0;
+            let daysWithEfficiency = 0;
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const raw = localStorage.getItem(`boiler_data_b${currentBoiler}_${date}`);
+                labels.push(String(day).padStart(2, '0'));
+
+                let steamForDay = null;
+                if (raw) {
+                    const savedData = JSON.parse(raw);
+                    if (!savedData || !Array.isArray(savedData.entries)) {
+                        throw new Error(`ข้อมูลบอยเลอร์ ${currentBoiler} วันที่ ${date} มีรูปแบบไม่ถูกต้อง`);
+                    }
+
+                    steamForDay = getEfficiencyTotals(savedData.entries).steamTonnes;
+                }
+
+                const coalForDay = steamForDay === null ? null : steamForDay * COAL_KG_PER_STEAM_TON;
+                const efficiency = calculateBoilerEfficiency(steamForDay, coalForDay);
+                dailySteam.push(steamForDay);
+                dailyCoal.push(coalForDay);
+                dailyEfficiency.push(efficiency);
+
+                if (steamForDay !== null) {
+                    steamTonnes += steamForDay;
+                    daysWithSteam++;
+                }
+                if (coalForDay !== null) {
+                    coalKg += coalForDay;
+                    daysWithCoal++;
+                }
+                if (efficiency !== null) {
+                    efficiencySteamTonnes += steamForDay;
+                    efficiencyCoalKg += coalForDay;
+                    daysWithEfficiency++;
+                }
+            }
+
+            return {
+                labels,
+                dailySteam,
+                dailyCoal,
+                dailyEfficiency,
+                steamTonnes: daysWithSteam ? steamTonnes : null,
+                coalKg: daysWithCoal ? coalKg : null,
+                efficiency: calculateBoilerEfficiency(
+                    daysWithEfficiency ? efficiencySteamTonnes : null,
+                    daysWithEfficiency ? efficiencyCoalKg : null
+                ),
+                daysWithSteam,
+                daysWithCoal,
+                daysWithEfficiency
+            };
+        }
+
+        function changeEfficiencyMonth(month) {
+            if (!/^\d{4}-\d{2}$/.test(month)) return;
+            currentEfficiencyMonth = month;
+            if (currentView === 'efficiency') {
+                renderEfficiencyCharts(getData());
+                pullRemoteMonth(currentBoiler, month);
+            }
+        }
+
+        function formatEfficiencyValue(value) {
+            return value === null || value === undefined
+                ? '-'
+                : Number(value).toLocaleString('th-TH', { maximumFractionDigits: 2 });
+        }
+
+        function renderEfficiencyCharts(data) {
+            const daily = getEfficiencyTotals(data.entries);
+            const monthly = getMonthEfficiencyData();
+            const dailyCoalKg = daily.coalKg;
+            const dailyEfficiency = calculateBoilerEfficiency(daily.steamTonnes, dailyCoalKg);
+            const params = BOILER_EFFICIENCY_PARAMS[currentBoiler];
+            const enthalpyDifference = params.steamEnthalpyKjKg - params.feedwaterEnthalpyKjKg;
+            const dailySteamEnergyGcal = daily.steamTonnes === null
+                ? null
+                : daily.steamTonnes * 1000 * enthalpyDifference / KJ_PER_GCAL;
+            const dailyCoalEnergyGcal = dailyCoalKg === null
+                ? null
+                : dailyCoalKg * COAL_LHV_KJ_PER_KG / KJ_PER_GCAL;
+            const monthLabel = currentEfficiencyMonth;
+
+            document.getElementById('efficiency-daily-steam').textContent = formatEfficiencyValue(daily.steamTonnes);
+            document.getElementById('efficiency-daily-coal').textContent = formatEfficiencyValue(dailyCoalKg);
+            document.getElementById('efficiency-monthly-steam').textContent = formatEfficiencyValue(monthly.steamTonnes);
+            document.getElementById('efficiency-monthly-coal').textContent = formatEfficiencyValue(monthly.coalKg);
+            document.getElementById('efficiency-daily-percent').textContent = dailyEfficiency === null ? '-' : `${formatEfficiencyValue(dailyEfficiency)}%`;
+            document.getElementById('efficiency-monthly-percent').textContent = monthly.efficiency === null ? '-' : `${formatEfficiencyValue(monthly.efficiency)}%`;
+            document.getElementById('efficiency-daily-steam-energy').textContent = formatEfficiencyValue(dailySteamEnergyGcal);
+            document.getElementById('efficiency-daily-coal-energy').textContent = formatEfficiencyValue(dailyCoalEnergyGcal);
+            document.getElementById('efficiency-daily-title').textContent =
+                `บอยเลอร์ ${currentBoiler} · ${currentDate} · ไอน้ำ ${params.steamPressureBar} bar / น้ำป้อน ${params.feedwaterTempC}°C`;
+            document.getElementById('efficiency-monthly-title').textContent =
+                `บอยเลอร์ ${currentBoiler} · ${monthLabel} · คำนวณได้ ${monthly.daysWithEfficiency} วัน`;
+            if (chartEfficiencyDaily) chartEfficiencyDaily.destroy();
+            if (chartEfficiencyMonthly) chartEfficiencyMonthly.destroy();
+
+            chartEfficiencyDaily = new Chart(document.getElementById('chart-efficiency-daily').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['พลังงานไอน้ำ', 'พลังงานถ่านหิน'],
+                    datasets: [
+                        {
+                            label: 'พลังงาน (Gcal/วัน)',
+                            data: [dailySteamEnergyGcal, dailyCoalEnergyGcal],
+                            backgroundColor: ['#0284c7', '#d97706']
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Gcal/วัน' } } }
+                }
+            });
+
+            chartEfficiencyMonthly = new Chart(document.getElementById('chart-efficiency-monthly').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: monthly.labels,
+                    datasets: [
+                        {
+                            label: 'ประสิทธิภาพ (%)',
+                            data: monthly.dailyEfficiency,
+                            backgroundColor: '#10b981',
+                            yAxisID: 'yEfficiency'
+                        },
+                        {
+                            type: 'line',
+                            label: 'ถ่านหินประมาณการ (กก./วัน)',
+                            data: monthly.dailyCoal,
+                            borderColor: '#d97706',
+                            backgroundColor: '#d97706',
+                            yAxisID: 'yCoal',
+                            tension: 0.3,
+                            spanGaps: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        yEfficiency: { type: 'linear', position: 'left', title: { display: true, text: 'ประสิทธิภาพ (%)' }, beginAtZero: true },
+                        yCoal: { type: 'linear', position: 'right', title: { display: true, text: 'ถ่านหิน (กก./วัน)' }, grid: { drawOnChartArea: false }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Render Blowdown & Verification Data
+        function renderExtraSections(data) {
+            // Blowdown Checkboxes
+            const bd = data.blowdown || {};
+            document.getElementById('bd-glass-m').checked = !!bd.glass_m;
+            document.getElementById('bd-glass-e').checked = !!bd.glass_e;
+            document.getElementById('bd-boiler-m').checked = !!bd.boiler_m;
+            document.getElementById('bd-boiler-e').checked = !!bd.boiler_e;
+            document.getElementById('bd-deaerator-m').checked = !!bd.deaerator_m;
+            document.getElementById('bd-deaerator-e').checked = !!bd.deaerator_e;
+
+            // Remarks
+            document.getElementById('daily-remarks').value = data.remarks || '';
+
+            // Signoff
+            const sf = data.signoff || {};
+            const badge = document.getElementById('signoff-status-badge');
+            const timeDisp = document.getElementById('signoff-time-display');
+            const btn = document.getElementById('btn-signoff');
+
+            if (sf.isSigned) {
+                badge.className = "px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800";
+                badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> ทวนสอบแล้ว (${sf.supervisor || SUPERVISOR_NAME})`;
+                timeDisp.innerText = sf.signedAt || '-';
+                btn.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm";
+                btn.innerHTML = `<i class="fa-solid fa-square-check"></i> ยกเลิกการทวนสอบ`;
+            } else {
+                badge.className = "px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800";
+                badge.innerText = "รอการทวนสอบ";
+                timeDisp.innerText = "-";
+                btn.className = "w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm";
+                btn.innerHTML = `<i class="fa-solid fa-signature text-amber-400"></i> ลงนามทวนสอบ (นายไพรคีรี)`;
+            }
+        }
+
+        // Save Extra Data (Blowdown & Remarks)
+        function saveExtraData() {
+            const data = getData();
+            data.blowdown = {
+                glass_m: document.getElementById('bd-glass-m').checked,
+                glass_e: document.getElementById('bd-glass-e').checked,
+                boiler_m: document.getElementById('bd-boiler-m').checked,
+                boiler_e: document.getElementById('bd-boiler-e').checked,
+                deaerator_m: document.getElementById('bd-deaerator-m').checked,
+                deaerator_e: document.getElementById('bd-deaerator-e').checked
+            };
+            data.remarks = document.getElementById('daily-remarks').value;
+            saveData(data);
+        }
+
+        // Toggle Signoff Status
+        function toggleSignoff() {
+            if (currentRole !== 'supervisor') {
+                alert("สิทธิ์ไม่ถูกต้อง: การลงนามทวนสอบต้องดำเนินการในบทบาท 'หัวหน้างาน' (นายไพรคีรี) เท่านั้น");
+                openLoginModal();
                 return;
             }
-            if (event.data.type === 'select-inspection-form') {
-                if (event.data.form === 'ph' && /^\d{4}-\d{2}$/.test(event.data.month || '')) {
-                    forms.ph.src = `ph_inspection.html?month=${encodeURIComponent(event.data.month)}`;
-                }
-                selectForm(event.data.form);
+
+            const data = getData();
+            if (!data.signoff) data.signoff = {};
+
+            if (data.signoff.isSigned) {
+                data.signoff.isSigned = false;
+                data.signoff.signedAt = null;
+            } else {
+                data.signoff.isSigned = true;
+                data.signoff.supervisor = SUPERVISOR_NAME;
+                data.signoff.signedAt = new Date().toLocaleString('th-TH');
             }
+
+            saveData(data);
+            renderExtraSections(data);
+        }
+
+        // Check Out of Spec Values Banner
+        function checkSpecAlerts(data) {
+            const alerts = [];
+            data.entries.forEach(e => {
+                if (e.steam_press !== null && (e.steam_press < 7.0 || e.steam_press > 10.0)) {
+                    alerts.push(`เวลา ${e.hour} น. ความดันไอน้ำ = ${e.steam_press} บาร์ (Spec: 7-10)`);
+                }
+                if (e.t_stack !== null && (e.t_stack < 100 || e.t_stack > 240)) {
+                    alerts.push(`เวลา ${e.hour} น. อุณหภูมิปล่อง = ${e.t_stack} °C (Spec: 100-240)`);
+                }
+            });
+
+            const banner = document.getElementById('spec-alert-banner');
+            const detail = document.getElementById('spec-alert-detail');
+
+            if (alerts.length > 0) {
+                banner.classList.remove('hidden');
+                detail.innerHTML = alerts.join('<br>');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        // Jump to Card from Dropdown
+        function jumpToHourCard() {
+            const idx = document.getElementById('hour-select').value;
+            const target = document.getElementById(`card-hour-${idx}`);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        // Modal Open/Close Controls
+        function openEntryModal(index) {
+            const data = getData();
+            const entry = data.entries[index];
+
+            document.getElementById('modal-hour-index').value = index;
+            document.getElementById('modal-hour-title').innerText = `${entry.hour} น.`;
+
+            // Set Operator Select (Default to logged-in user or previous record)
+            const modalOp = document.getElementById('modal-operator-name');
+            modalOp.value = entry.operator || currentUser;
+
+            // Fill inputs
+            document.getElementById('m-steam-press').value = entry.steam_press ?? '';
+            document.getElementById('m-glass-level').value = entry.glass_level || 'ปกติ';
+            document.getElementById('m-p-boiler').value = entry.p_boiler ?? '';
+            document.getElementById('m-p-condensate').value = entry.p_condensate ?? '';
+            document.getElementById('m-p-scrubber').value = entry.p_scrubber ?? '';
+            document.getElementById('m-p-storage').value = entry.p_storage ?? '';
+            document.getElementById('m-p-soft').value = entry.p_soft ?? '';
+            document.getElementById('m-t-boiler').value = entry.t_boiler ?? '';
+            document.getElementById('m-t-stack').value = entry.t_stack ?? '';
+            document.getElementById('m-t-condensate').value = entry.t_condensate ?? '';
+            document.getElementById('m-t-deaerator').value = entry.t_deaerator ?? '';
+            document.getElementById('m-w-high').value = entry.w_high || '✓';
+            document.getElementById('m-w-med').value = entry.w_med || '✓';
+            document.getElementById('m-w-low').value = entry.w_low || '-';
+            document.getElementById('m-w-siren').value = entry.w_siren || 'ปกติ';
+            document.getElementById('m-water-meter').value = entry.water_meter ?? '';
+            document.getElementById('m-f-isowa-meter').value = entry.f_isowa_meter ?? '';
+            document.getElementById('m-f-isowa-use').value = entry.f_isowa_use ?? '';
+            document.getElementById('m-f-isowa-avg').value = entry.f_isowa_avg ?? '';
+            document.getElementById('m-f-bhs-meter').value = entry.f_bhs_meter ?? '';
+            document.getElementById('m-f-bhs-use').value = entry.f_bhs_use ?? '';
+            document.getElementById('m-f-bhs-avg').value = entry.f_bhs_avg ?? '';
+            document.getElementById('m-f-yueli-meter').value = entry.f_yueli_meter ?? '';
+            document.getElementById('m-f-yueli-use').value = entry.f_yueli_use ?? '';
+            document.getElementById('m-f-yueli-avg').value = entry.f_yueli_avg ?? '';
+
+            document.getElementById('entry-modal').classList.remove('hidden');
+        }
+
+        function closeEntryModal() {
+            document.getElementById('entry-modal').classList.add('hidden');
+        }
+
+        function saveEntryForm(event) {
+            event.preventDefault();
+            const index = parseInt(document.getElementById('modal-hour-index').value);
+            const data = getData();
+            const readOptionalNumber = (id) => {
+                const value = document.getElementById(id).value;
+                return value === '' ? null : Number(value);
+            };
+
+            data.entries[index] = {
+                hour: HOURS[index],
+                steam_press: parseFloat(document.getElementById('m-steam-press').value) || null,
+                glass_level: document.getElementById('m-glass-level').value,
+                p_boiler: parseFloat(document.getElementById('m-p-boiler').value) || null,
+                p_condensate: parseFloat(document.getElementById('m-p-condensate').value) || null,
+                p_scrubber: parseFloat(document.getElementById('m-p-scrubber').value) || null,
+                p_storage: parseFloat(document.getElementById('m-p-storage').value) || null,
+                p_soft: parseFloat(document.getElementById('m-p-soft').value) || null,
+                t_boiler: parseFloat(document.getElementById('m-t-boiler').value) || null,
+                t_stack: parseFloat(document.getElementById('m-t-stack').value) || null,
+                t_condensate: parseFloat(document.getElementById('m-t-condensate').value) || null,
+                t_deaerator: parseFloat(document.getElementById('m-t-deaerator').value) || null,
+                w_high: document.getElementById('m-w-high').value,
+                w_med: document.getElementById('m-w-med').value,
+                w_low: document.getElementById('m-w-low').value,
+                w_siren: document.getElementById('m-w-siren').value,
+                water_meter: parseFloat(document.getElementById('m-water-meter').value) || null,
+                f_isowa_meter: readOptionalNumber('m-f-isowa-meter'),
+                f_isowa_use: readOptionalNumber('m-f-isowa-use'),
+                f_isowa_avg: readOptionalNumber('m-f-isowa-avg'),
+                f_bhs_meter: readOptionalNumber('m-f-bhs-meter'),
+                f_bhs_use: readOptionalNumber('m-f-bhs-use'),
+                f_bhs_avg: readOptionalNumber('m-f-bhs-avg'),
+                f_yueli_meter: readOptionalNumber('m-f-yueli-meter'),
+                f_yueli_use: readOptionalNumber('m-f-yueli-use'),
+                f_yueli_avg: readOptionalNumber('m-f-yueli-avg'),
+                operator: document.getElementById('modal-operator-name').value
+            };
+
+            saveData(data);
+            closeEntryModal();
+            loadDateData();
+        }
+
+        // Login & User Switching Logic
+        function openLoginModal() {
+            document.getElementById('login-password').value = '';
+            document.getElementById('login-modal').classList.remove('hidden');
+            document.getElementById('login-password').focus();
+        }
+
+        function closeLoginModal() {
+            document.getElementById('login-modal').classList.add('hidden');
+        }
+
+        function selectRole(role) {
+            if (role !== 'operator' && role !== 'supervisor') return;
+            currentRole = role;
+            const btnOp = document.getElementById('role-btn-operator');
+            const btnSup = document.getElementById('role-btn-supervisor');
+
+            if (role === 'operator') {
+                btnOp.className = "p-3 border-2 border-amber-500 bg-amber-50/50 rounded-xl text-left transition flex flex-col gap-1";
+                btnSup.className = "p-3 border border-slate-200 rounded-xl text-left transition flex flex-col gap-1 hover:border-slate-300";
+            } else {
+                btnSup.className = "p-3 border-2 border-amber-500 bg-amber-50/50 rounded-xl text-left transition flex flex-col gap-1";
+                btnOp.className = "p-3 border border-slate-200 rounded-xl text-left transition flex flex-col gap-1 hover:border-slate-300";
+            }
+        }
+
+        function confirmLogin() {
+            const password = document.getElementById('login-password').value;
+            const expectedPassword = currentRole === 'operator' ? '1234' : '8888';
+            if (password !== expectedPassword) {
+                alert('รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง');
+                document.getElementById('login-password').value = '';
+                document.getElementById('login-password').focus();
+                return;
+            }
+
+            currentUser = currentRole === 'operator' ? OPERATORS[0] : SUPERVISOR_NAME;
+            updateUserUI();
+            closeLoginModal();
+        }
+
+        function updateUserUI() {
+            const display = document.getElementById('current-user-display');
+            if (currentRole === 'operator') {
+                display.innerText = 'Operator';
+                display.className = "text-sm font-semibold text-amber-400";
+            } else {
+                display.innerText = 'Supervisor';
+                display.className = "text-sm font-semibold text-emerald-400";
+            }
+        }
+
+        // Export Functions (Excel & CSV)
+        function exportExcel() {
+            const data = getData();
+            const exportRows = data.entries.map(e => ({
+                "เวลา": e.hour,
+                "ความดันไอน้ำ (บาร์)": e.steam_press,
+                "ระดับน้ำหลอดแก้ว": e.glass_level,
+                "ดันปั๊มน้ำเข้าหม้อ": e.p_boiler,
+                "ดัน Condensate": e.p_condensate,
+                "ดัน Wet Scrubber": e.p_scrubber,
+                "ดัน Storage": e.p_storage,
+                "ดัน เข้า Soft": e.p_soft,
+                "Temp เข้าหม้อ": e.t_boiler,
+                "Temp ปล่อง": e.t_stack,
+                "Temp Condensate": e.t_condensate,
+                "Temp ดิแอร์": e.t_deaerator,
+                "น้ำ High": e.w_high,
+                "น้ำ Med": e.w_med,
+                "น้ำ Low": e.w_low,
+                "Siren Alarm": e.w_siren,
+                "มิเตอร์น้ำ (คิว)": e.water_meter,
+                "ISOWA ตัวเลขมิเตอร์": e.f_isowa_meter,
+                "ISOWA ใช้": e.f_isowa_use,
+                "ISOWA เฉลี่ย": e.f_isowa_avg,
+                "BHS ตัวเลขมิเตอร์": e.f_bhs_meter,
+                "BHS ใช้": e.f_bhs_use,
+                "BHS เฉลี่ย": e.f_bhs_avg,
+                "YUELI ตัวเลขมิเตอร์": e.f_yueli_meter,
+                "YUELI ใช้": e.f_yueli_use,
+                "YUELI เฉลี่ย": e.f_yueli_avg,
+                "ผู้ตรวจสอบ": e.operator
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, `บอยเลอร์_${currentBoiler}`);
+
+            XLSX.writeFile(workbook, `Boiler_Inspection_B${currentBoiler}_${currentDate}.xlsx`);
+        }
+
+        function exportCSV() {
+            const data = getData();
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+            csvContent += "เวลา,ความดันไอน้ำ,หลอดแก้ว,ดันเข้าหม้อ,ดันCondensate,ดันScrubber,ดันStorage,ดันSoft,Tempเข้าหม้อ,Tempปล่อง,TempCondensate,Tempดิแอร์,High,Med,Low,Siren,มิเตอร์น้ำ,ISOWAตัวเลขมิเตอร์,ISOWAใช้,ISOWAเฉลี่ย,BHSตัวเลขมิเตอร์,BHSใช้,BHSเฉลี่ย,YUELIตัวเลขมิเตอร์,YUELIใช้,YUELIเฉลี่ย,ผู้ตรวจสอบ\n";
+
+            data.entries.forEach(e => {
+                const row = [
+                    e.hour, e.steam_press, e.glass_level, e.p_boiler, e.p_condensate,
+                    e.p_scrubber, e.p_storage, e.p_soft, e.t_boiler, e.t_stack,
+                    e.t_condensate, e.t_deaerator, e.w_high, e.w_med, e.w_low,
+                    e.w_siren, e.water_meter, e.f_isowa_meter, e.f_isowa_use, e.f_isowa_avg,
+                    e.f_bhs_meter, e.f_bhs_use, e.f_bhs_avg, e.f_yueli_meter,
+                    e.f_yueli_use, e.f_yueli_avg, e.operator
+                ].join(",");
+                csvContent += row + "\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `Boiler_Inspection_B${currentBoiler}_${currentDate}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // =====================================================
+        // Google Sheets Sync (shared data across devices)
+        // localStorage stays as the local cache; Sheets is the shared source.
+        // Merge rule: per-hour entry / blowdown / remarks / signoff, newest timestamp wins.
+        // =====================================================
+        const SYNC_URL_KEY = 'sheet_sync_url';
+        const SYNC_TOKEN_KEY = 'sheet_sync_token';
+        const SYNC_POLL_MS = 60000;
+        const pendingSaves = new Map();   // "b|date" -> timeout id
+        let syncBusy = 0;
+
+        function syncCfg() {
+            return { url: localStorage.getItem(SYNC_URL_KEY) || '', token: localStorage.getItem(SYNC_TOKEN_KEY) || '' };
+        }
+        function setSyncStatus(state, text) {
+            const colors = { off: 'bg-slate-500', ok: 'bg-emerald-400', busy: 'bg-amber-400 animate-pulse', err: 'bg-red-500' };
+            document.getElementById('sync-dot').className = 'w-2 h-2 rounded-full ' + (colors[state] || colors.off);
+            document.getElementById('sync-text').innerText = text;
+        }
+        function openSyncModal() {
+            const c = syncCfg();
+            document.getElementById('sync-url').value = c.url;
+            document.getElementById('sync-token').value = c.token;
+            setSyncMsg('', '');
+            document.getElementById('sync-modal').classList.remove('hidden');
+        }
+        function setSyncMsg(kind, text) {
+            const el = document.getElementById('sync-msg');
+            if (!el) return;
+            el.className = 'text-xs mb-3 break-words ' + (kind === 'ok' ? 'text-emerald-700' : kind === 'err' ? 'text-red-600' : 'hidden');
+            el.innerText = text;
+        }
+        function explainSyncError(err) {
+            const m = String((err && err.message) || err);
+            if (/Failed to fetch|NetworkError|Load failed/i.test(m))
+                return 'เชื่อมต่อไม่ได้ (' + m + '): ตรวจว่า Deploy เป็น "Anyone" (ไม่ใช่ Anyone with Google account), URL ลงท้าย /exec และเครื่องต่ออินเทอร์เน็ตอยู่';
+            if (/Unexpected token|JSON/i.test(m))
+                return 'Google ตอบกลับเป็นหน้าเว็บแทนข้อมูล (' + m + '): มักเกิดจากตั้งสิทธิ์ไม่ใช่ "Anyone" หรือยังไม่ได้ Deploy เวอร์ชันใหม่';
+            return m;
+        }
+        function closeSyncModal() { document.getElementById('sync-modal').classList.add('hidden'); }
+        function saveSyncSettings() {
+            localStorage.setItem(SYNC_URL_KEY, document.getElementById('sync-url').value.trim());
+            localStorage.setItem(SYNC_TOKEN_KEY, document.getElementById('sync-token').value);
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'sync-config',
+                    url: localStorage.getItem(SYNC_URL_KEY),
+                    token: localStorage.getItem(SYNC_TOKEN_KEY)
+                }, '*');
+            }
+            syncNow();
+        }
+        function syncNow() {
+            if (!syncCfg().url) { setSyncStatus('off', 'ยังไม่ตั้งค่าซิงค์'); return; }
+            pushAllLocal().then(() => pullRemoteDay(currentBoiler, currentDate, true));
+        }
+
+        // Stamp the parts that changed since the last local copy, so merges know what is newer.
+        function stampChanges(data) {
+            const raw = localStorage.getItem(getStorageKey());
+            const prev = raw ? JSON.parse(raw) : createInitialData();
+            const now = Date.now();
+            data.entries.forEach((e, i) => {
+                const p = prev.entries[i] || {};
+                const a = Object.assign({}, e), b = Object.assign({}, p);
+                delete a._ts; delete b._ts;
+                if (JSON.stringify(a) !== JSON.stringify(b)) e._ts = now;
+                else if (p._ts && !e._ts) e._ts = p._ts;
+            });
+            ['blowdown', 'remarks', 'signoff'].forEach(k => {
+                const tsKey = k + '_ts';
+                if (JSON.stringify(data[k]) !== JSON.stringify(prev[k])) data[tsKey] = now;
+                else if (prev[tsKey] && !data[tsKey]) data[tsKey] = prev[tsKey];
+            });
+        }
+
+        // Same rule as the Apps Script: newest timestamp wins per part.
+        function mergeDocs(local, remote) {
+            if (!remote) return local;
+            if (!local) return remote;
+            const out = JSON.parse(JSON.stringify(local));
+            out.entries = HOURS.map((h, i) => {
+                const l = local.entries[i] || {}, r = (remote.entries || [])[i] || {};
+                return (r._ts || 0) > (l._ts || 0) ? r : l;
+            });
+            ['blowdown', 'remarks', 'signoff'].forEach(k => {
+                const t = k + '_ts';
+                if ((remote[t] || 0) > (local[t] || 0)) { out[k] = remote[k]; out[t] = remote[t]; }
+            });
+            return out;
+        }
+
+        async function syncCall(method, params, body) {
+            const c = syncCfg();
+            const qs = new URLSearchParams(Object.assign({ token: c.token }, params)).toString();
+            const opt = method === 'POST'
+                ? { method: 'POST', body: JSON.stringify(Object.assign({ token: c.token }, body)) }  // text/plain: no CORS preflight
+                : { method: 'GET' };
+            const res = await fetch(c.url + (method === 'GET' ? '?' + qs : ''), opt);
+            const json = await res.json();
+            if (json.error) throw new Error(json.error);
+            return json;
+        }
+        async function withStatus(fn) {
+            if (!syncCfg().url) { setSyncStatus('off', 'ยังไม่ตั้งค่าซิงค์'); return; }
+            syncBusy++; setSyncStatus('busy', 'กำลังซิงค์...');
+            try {
+                await fn();
+                const t = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                setSyncStatus('ok', 'ซิงค์แล้ว ' + t); setSyncMsg('ok', 'เชื่อมต่อสำเร็จ ' + t);
+            } catch (err) {
+                console.error(err);
+                setSyncStatus('err', 'ซิงค์ไม่สำเร็จ (บันทึกในเครื่องแล้ว)'); setSyncMsg('err', 'สาเหตุ: ' + explainSyncError(err));
+            }
+            finally { syncBusy--; }
+        }
+
+        function queueRemoteSave(boiler, date) {
+            if (!syncCfg().url) return;
+            const k = boiler + '|' + date;
+            clearTimeout(pendingSaves.get(k));
+            setSyncStatus('busy', 'รอซิงค์...');
+            pendingSaves.set(k, setTimeout(() => { pendingSaves.delete(k); pushDay(boiler, date); }, 1500));
+        }
+        function pushDay(boiler, date) {
+            return withStatus(async () => {
+                const raw = localStorage.getItem(`boiler_data_b${boiler}_${date}`);
+                if (!raw) return;
+                const res = await syncCall('POST', {}, { action: 'save', boiler, date, doc: JSON.parse(raw) });
+                if (res.doc) {
+                    localStorage.setItem(`boiler_data_b${boiler}_${date}`, JSON.stringify(res.doc));
+                    if (boiler === currentBoiler && date === currentDate && !modalOpen()) rerenderFrom(res.doc);
+                }
+            });
+        }
+        function pushAllLocal() {
+            // Upload any cached day that has user-entered changes (used on first connect / manual sync)
+            const jobs = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const m = /^boiler_data_b(\d)_(\d{4}-\d{2}-\d{2})$/.exec(localStorage.key(i) || '');
+                if (m) jobs.push(pushDay(Number(m[1]), m[2]));
+            }
+            return Promise.all(jobs);
+        }
+        function pullRemoteDay(boiler, date, force) {
+            return withStatus(async () => {
+                const res = await syncCall('GET', { action: 'get', boiler, date });
+                if (!res.doc) return;
+                const key = `boiler_data_b${boiler}_${date}`;
+                const raw = localStorage.getItem(key);
+                const merged = mergeDocs(raw ? JSON.parse(raw) : null, res.doc);
+                if (JSON.stringify(merged) !== raw) {
+                    localStorage.setItem(key, JSON.stringify(merged));
+                    if (boiler === currentBoiler && date === currentDate && (force || !modalOpen())) rerenderFrom(merged);
+                }
+            });
+        }
+        function pullRemoteMonth(boiler, month) {
+            return withStatus(async () => {
+                const res = await syncCall('GET', { action: 'month', boiler, month });
+                let changed = false;
+                (res.docs || []).forEach(d => {
+                    const key = `boiler_data_b${boiler}_${d.date}`;
+                    const raw = localStorage.getItem(key);
+                    const merged = mergeDocs(raw ? JSON.parse(raw) : null, d.doc);
+                    if (JSON.stringify(merged) !== raw) { localStorage.setItem(key, JSON.stringify(merged)); changed = true; }
+                });
+                if (changed && currentView === 'efficiency' && boiler === currentBoiler) renderEfficiencyCharts(getData());
+            });
+        }
+        function modalOpen() {
+            return ['entry-modal', 'login-modal', 'sync-modal'].some(id => {
+                const el = document.getElementById(id);
+                return el && !el.classList.contains('hidden');
+            });
+        }
+        function rerenderFrom(data) {
+            renderCardsView(data); renderTableView(data); renderCharts(data);
+            renderExtraSections(data); checkSpecAlerts(data);
+            if (currentView === 'efficiency') renderEfficiencyCharts(data);
+        }
+
+        // Keep other devices' changes flowing in
+        setInterval(() => {
+            if (!document.hidden && !modalOpen() && !syncBusy && syncCfg().url && !pendingSaves.size) pullRemoteDay(currentBoiler, currentDate);
+        }, SYNC_POLL_MS);
+        window.addEventListener('load', () => { if (!syncCfg().url) setSyncStatus('off', 'ยังไม่ตั้งค่าซิงค์'); });
+        window.addEventListener('message', event => {
+            if (event.source !== window.parent || !event.data || event.data.type !== 'get-sync-config') return;
+            window.parent.postMessage({
+                type: 'sync-config',
+                url: localStorage.getItem(SYNC_URL_KEY) || '',
+                token: localStorage.getItem(SYNC_TOKEN_KEY) || ''
+            }, '*');
         });
     </script>
 </body>
