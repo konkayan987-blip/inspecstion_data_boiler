@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- SheetJS (xlsx) CDN -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Prompt Font from Google Fonts -->
@@ -518,11 +520,9 @@
     <div id="sync-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
             <h3 class="text-base font-bold text-slate-800 mb-1">ซิงค์ข้อมูลกับ Google Sheets</h3>
-            <p class="text-xs text-slate-500 mb-4">ใส่ URL ของ Web App และรหัสผ่านที่ตั้งไว้ในสคริปต์ (ตั้งครั้งเดียวต่อเครื่อง)</p>
+            <p class="text-xs text-slate-500 mb-4">ใส่ URL ของ Web App (ตั้งครั้งเดียวต่อเครื่อง)</p>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Web App URL</label>
-            <input id="sync-url" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-3">
-            <label class="block text-xs font-semibold text-slate-700 mb-1">รหัสผ่านซิงค์ (TOKEN)</label>
-            <input id="sync-token" type="password" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-4">
+            <input id="sync-url" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-4">
             <p id="sync-msg" class="text-xs mb-3 break-words hidden"></p>
             <div class="flex flex-wrap justify-end gap-2">
                 <button onclick="closeSyncModal()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-700">ปิด</button>
@@ -1822,13 +1822,13 @@
         // Merge rule: per-hour entry / blowdown / remarks / signoff, newest timestamp wins.
         // =====================================================
         const SYNC_URL_KEY = 'sheet_sync_url';
-        const SYNC_TOKEN_KEY = 'sheet_sync_token';
+        localStorage.removeItem('sheet_sync_token');   // เลิกใช้ TOKEN แล้ว ล้างค่าเก่าที่เคยจำไว้
         const SYNC_POLL_MS = 60000;
         const pendingSaves = new Map();   // "b|date" -> timeout id
         let syncBusy = 0;
 
         function syncCfg() {
-            return { url: localStorage.getItem(SYNC_URL_KEY) || '', token: localStorage.getItem(SYNC_TOKEN_KEY) || '' };
+            return { url: localStorage.getItem(SYNC_URL_KEY) || '' };
         }
         function setSyncStatus(state, text) {
             const colors = { off: 'bg-slate-500', ok: 'bg-emerald-400', busy: 'bg-amber-400 animate-pulse', err: 'bg-red-500' };
@@ -1838,7 +1838,6 @@
         function openSyncModal() {
             const c = syncCfg();
             document.getElementById('sync-url').value = c.url;
-            document.getElementById('sync-token').value = c.token;
             setSyncMsg('', '');
             document.getElementById('sync-modal').classList.remove('hidden');
         }
@@ -1859,12 +1858,10 @@
         function closeSyncModal() { document.getElementById('sync-modal').classList.add('hidden'); }
         function saveSyncSettings() {
             localStorage.setItem(SYNC_URL_KEY, document.getElementById('sync-url').value.trim());
-            localStorage.setItem(SYNC_TOKEN_KEY, document.getElementById('sync-token').value);
             if (window.parent !== window) {
                 window.parent.postMessage({
                     type: 'sync-config',
-                    url: localStorage.getItem(SYNC_URL_KEY),
-                    token: localStorage.getItem(SYNC_TOKEN_KEY)
+                    url: localStorage.getItem(SYNC_URL_KEY)
                 }, '*');
             }
             syncNow();
@@ -1911,9 +1908,9 @@
 
         async function syncCall(method, params, body) {
             const c = syncCfg();
-            const qs = new URLSearchParams(Object.assign({ token: c.token }, params)).toString();
+            const qs = new URLSearchParams(params).toString();
             const opt = method === 'POST'
-                ? { method: 'POST', body: JSON.stringify(Object.assign({ token: c.token }, body)) }  // text/plain: no CORS preflight
+                ? { method: 'POST', body: JSON.stringify(body) }  // text/plain: no CORS preflight
                 : { method: 'GET' };
             const res = await fetch(c.url + (method === 'GET' ? '?' + qs : ''), opt);
             const json = await res.json();
@@ -2008,8 +2005,7 @@
             if (event.source !== window.parent || !event.data || event.data.type !== 'get-sync-config') return;
             window.parent.postMessage({
                 type: 'sync-config',
-                url: localStorage.getItem(SYNC_URL_KEY) || '',
-                token: localStorage.getItem(SYNC_TOKEN_KEY) || ''
+                url: localStorage.getItem(SYNC_URL_KEY) || ''
             }, '*');
         });
     </script>
@@ -2045,6 +2041,7 @@
     // ---------- Show / hide ----------
     function showForm(f) {
         active = f; sel.value = f;
+        try { history.replaceState(null, '', f === 'daily' ? location.pathname + location.search : '#' + f); } catch (e) {}
         const ids = ['view-cards-container', 'view-table-container', 'view-chart-container', 'view-efficiency-container', 'boiler-extra-sections'];
         const modeBar = document.getElementById('view-btn-cards').parentElement;
         const ex = document.getElementById('boiler-export-actions');
@@ -2179,7 +2176,7 @@
         panel.innerHTML = `<div class="${card}">
             <div class="flex flex-wrap justify-between items-center gap-3 mb-1">
                 <h2 class="text-base font-bold text-slate-800"><i class="fa-solid fa-faucet-drip text-amber-600"></i> FM-002 บันทึกการตรวจวัดสตีมแทร็ป · วันที่ ${esc(currentDate)}</h2>
-                <button data-act="grid" class="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold">${showGrid ? 'ซ่อน' : 'ดู'}ตารางทั้งเดือน ${month}</button>
+                <div class="flex gap-2"><button data-act="stxls" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"><i class="fa-solid fa-file-excel"></i> ส่งออก Excel</button><button data-act="grid" class="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold">${showGrid ? 'ซ่อน' : 'ดู'}ตารางทั้งเดือน ${month}</button></div>
             </div>
             <p class="text-xs text-slate-500 mb-1">Spec: IN ≥ ${SPEC_IN} °C · OUT ≥ ${SPEC_OUT} °C · IN ต้องสูงกว่า OUT · ตรวจ 1 ครั้ง/วัน · ใช้ร่วมกันทุกบอยเลอร์</p>
             <p id="steam-sum"></p>
@@ -2189,8 +2186,18 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-xs">
                 <div><label class="font-semibold text-slate-700 block mb-1">ผู้ตรวจวัด (วันนี้)</label>${opSelect(day.operator, 'data-f="operator"')}</div>
                 <div><label class="font-semibold text-slate-700 block mb-1">บันทึกเพิ่มเติม (ทั้งเดือน)</label><textarea data-f="remarks" rows="3" class="${inp}">${esc(d.remarks)}</textarea></div>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <span class="font-semibold">ผู้ทวนสอบ (หัวหน้าแผนก Boiler) ประจำเดือน ${month}:</span>
+                <span class="${(d.verify || {}).signed ? 'text-emerald-700 font-semibold' : 'text-amber-700'}">${(d.verify || {}).signed ? `ทวนสอบแล้ว (${esc(d.verify.by)}) ${esc(d.verify.at)}` : 'รอการทวนสอบ'}</span>
+                <button data-act="stverify" class="ml-auto px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold">${(d.verify || {}).signed ? 'ยกเลิกการทวนสอบ' : 'ลงนามทวนสอบ'}</button>
             </div>${grid}</div>`;
         steamSummary(d);
+        panel.insertAdjacentHTML('beforeend', '<div class="grid grid-cols-1 gap-4">'
+            + chartBox('fm-ch-trap-day', 'อุณหภูมิ IN / OUT รายตัว · วันที่ ' + esc(currentDate), `BHS 1–19 · ISOWA 20–44 · YUELI 45–59 · เส้นประ = Spec (IN ≥ ${SPEC_IN}, OUT ≥ ${SPEC_OUT}) · แท่งแดง = ผิด Spec`)
+            + chartBox('fm-ch-trap-month', 'แนวโน้มรายเดือน ' + month, 'แท่ง = จำนวนตัวที่ผิด Spec ในแต่ละวัน · เส้น = อุณหภูมิเฉลี่ย IN / OUT ของวันที่บันทึก')
+            + '</div>');
+        drawSteamCharts(d);
     }
     function paintTrap(n, v) {
         panel.querySelectorAll(`[data-n="${n}"]`).forEach(el => el.classList.toggle('out-of-spec', el.dataset.f === 'i' ? inBad(v.i, v.o) : outBad(v.i, v.o)));
@@ -2230,7 +2237,7 @@
         panel.innerHTML = `<div class="${card}">
             <div class="flex flex-wrap justify-between items-center gap-3 mb-1">
                 <h2 class="text-base font-bold text-slate-800"><i class="fa-solid fa-flask text-amber-600"></i> FM-004 บันทึกตรวจเช็คค่า pH ของน้ำในระบบหม้อไอน้ำ · วันที่ ${esc(currentDate)}</h2>
-                <button data-act="phgrid" class="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold">${phGrid ? 'ซ่อน' : 'ดู'}ตารางทั้งเดือน ${month}</button>
+                <div class="flex gap-2"><button data-act="phxls" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"><i class="fa-solid fa-file-excel"></i> ส่งออก Excel</button><button data-act="phgrid" class="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold">${phGrid ? 'ซ่อน' : 'ดู'}ตารางทั้งเดือน ${month}</button></div>
             </div>
             <p class="text-xs text-slate-500 mb-3">ตรวจ 1 ครั้ง/กะ (กะ A, B) · ช่องที่ออกนอก Spec จะแดง · ใช้ร่วมกันทั้ง 3 บอยเลอร์</p>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">${shift('A')}${shift('B')}</div>
@@ -2239,6 +2246,12 @@
                 <span class="${v.signed ? 'text-emerald-700 font-semibold' : 'text-amber-700'}">${v.signed ? `ทวนสอบแล้ว (${esc(v.by)}) ${esc(v.at)}` : 'รอการทวนสอบ'}</span>
                 <button data-act="phverify" class="ml-auto px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold">${v.signed ? 'ยกเลิกการทวนสอบ' : 'ลงนามทวนสอบ'}</button>
             </div>${grid}</div>`;
+        panel.insertAdjacentHTML('beforeend', '<div class="grid grid-cols-1 gap-4">'
+            + chartBox('fm-ch-ph-soft', 'pH Soft water · ' + month, 'Spec 5.8–9.5 (เส้นประ) · แกน X = วันที่และกะ (A/B)')
+            + chartBox('fm-ch-ph-bd', 'pH Blowdown Boiler 1 / 2 / 3 · ' + month, 'Spec 8.5–11.8 (เส้นประ)')
+            + chartBox('fm-ch-ph-tap', 'pH น้ำประปา · ' + month, 'Spec 6.5–8.5 (เส้นประ)')
+            + '</div>');
+        drawPhCharts(d);
     }
 
     // ---------- Events ----------
@@ -2254,7 +2267,7 @@
                 else { const n = t.dataset.n; day.t[n] = day.t[n] || {}; day.t[n][f] = num(t.value); paintTrap(n, day.t[n]); }
                 day._ts = Date.now();
             }
-            put('steam', currentBoiler, month, d); steamSummary(d);
+            put('steam', currentBoiler, month, d); steamSummary(d); drawSteamCharts(d);
         } else if (active === 'ph') {
             const month = currentDate.slice(0, 7), dd = currentDate.slice(8, 10), d = getPh(), sh = t.dataset.s;
             d.days[dd] = d.days[dd] || {};
@@ -2263,13 +2276,23 @@
             d.days[dd]._ts = Date.now();
             const sp = PH_FIELDS.find(x => x[0] === f);
             if (sp) t.classList.toggle('out-of-spec', phOut(r[f], sp[2]));
-            put('ph', currentBoiler, month, d);
+            put('ph', currentBoiler, month, d); drawPhCharts(d);
         }
     });
     panel.addEventListener('click', e => {
         const b = e.target.closest('[data-act]');
         if (!b) return;
         if (active === 'steam' && b.dataset.act === 'grid') { showGrid = !showGrid; renderSteam(); }
+        else if (b.dataset.act === 'stxls') exportSteamXlsx();
+        else if (b.dataset.act === 'phxls') exportPhXlsx();
+        else if (active === 'steam' && b.dataset.act === 'stverify') {
+            if (currentRole !== 'supervisor') { alert("การลงนามทวนสอบต้องเข้าสู่ระบบในบทบาท 'หัวหน้างาน' เท่านั้น"); openLoginModal(); return; }
+            const d = getSteam();
+            d.verify = (d.verify && d.verify.signed) ? { signed: false } : { signed: true, by: SUPERVISOR_NAME, at: new Date().toLocaleString('th-TH') };
+            d.verify_ts = Date.now();
+            put('steam', currentBoiler, currentDate.slice(0, 7), d);
+            renderSteam();
+        }
         else if (active === 'ph' && b.dataset.act === 'phgrid') { phGrid = !phGrid; renderPh(); }
         else if (active === 'ph' && b.dataset.act === 'phverify') {
             if (currentRole !== 'supervisor') { alert("การลงนามทวนสอบต้องเข้าสู่ระบบในบทบาท 'หัวหน้างาน' เท่านั้น"); openLoginModal(); return; }
@@ -2280,6 +2303,224 @@
             renderPh();
         }
     });
+
+
+    // ---------- QR Code ลิงก์เข้าแต่ละฟอร์ม ----------
+    const QR_LINKS = [['', 'FM-001 ตรวจบอยเลอร์ประจำวัน'], ['#steam', 'FM-002 สตีมแทร็ป'], ['#ph', 'FM-004 ค่า pH']];
+    const QR_KEY = 'qr_base_url';
+    function applyHash() {
+        const h = location.hash.slice(1);
+        if (h === 'steam' || h === 'ph') showForm(h); else if (active !== 'daily') showForm('daily');
+    }
+    window.addEventListener('load', () => setTimeout(applyHash, 0));
+    window.addEventListener('hashchange', applyHash);
+
+    const qrBtn = document.createElement('button');
+    qrBtn.className = 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium flex items-center gap-2 transition';
+    qrBtn.innerHTML = '<i class="fa-solid fa-qrcode text-amber-400"></i> QR Code';
+    const syncBadge = document.getElementById('sync-badge');
+    syncBadge.parentNode.insertBefore(qrBtn, syncBadge);
+
+    const qrModal = document.createElement('div');
+    qrModal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto no-print';
+    qrModal.innerHTML = `<div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-5 my-8">
+        <div class="flex justify-between items-center mb-2"><h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-qrcode text-amber-600"></i> QR Code ลิงก์เข้าแบบฟอร์ม</h3>
+            <button id="qr-close" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+        <p class="text-xs text-slate-500 mb-3">สแกนด้วยมือถือเพื่อเปิดแบบฟอร์มนั้นโดยตรง ใส่ URL ของหน้านี้ที่เปิดใช้งานจริง (ที่ทุกคนเข้าถึงได้)</p>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">URL หน้าเว็บ</label>
+        <input id="qr-base" type="url" placeholder="https://..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-1">
+        <p id="qr-warn" class="text-xs text-red-600 mb-2 hidden"></p>
+        <div id="qr-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3"></div>
+        <div class="flex justify-end gap-2 mt-4">
+            <button id="qr-make" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-700">สร้างใหม่</button>
+            <button id="qr-print" class="px-3 py-2 text-sm rounded-lg bg-amber-500 text-slate-950 font-semibold">พิมพ์ QR</button>
+        </div></div>`;
+    document.body.appendChild(qrModal);
+    const qrBase = qrModal.querySelector('#qr-base'), qrGrid = qrModal.querySelector('#qr-grid'), qrWarn = qrModal.querySelector('#qr-warn');
+
+    function makeQr() {
+        const base = qrBase.value.trim().split('#')[0];
+        qrGrid.innerHTML = '';
+        qrWarn.classList.add('hidden');
+        if (!/^https?:\/\//i.test(base)) { qrWarn.textContent = 'ใส่ URL ที่ขึ้นต้นด้วย http:// หรือ https:// (ไฟล์ที่เปิดจากเครื่อง file:// สแกนด้วยมือถือไม่ได้)'; qrWarn.classList.remove('hidden'); return; }
+        if (typeof QRCode === 'undefined') { qrWarn.textContent = 'โหลดไลบรารี QR ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'; qrWarn.classList.remove('hidden'); return; }
+        localStorage.setItem(QR_KEY, base);
+        QR_LINKS.forEach(([hash, label]) => {
+            const url = base + hash, box = document.createElement('div');
+            box.className = 'border border-slate-200 rounded-xl p-3 text-center';
+            box.innerHTML = `<div class="flex justify-center qr-img"></div><p class="text-xs font-bold text-slate-800 mt-2">${esc(label)}</p><p class="text-[10px] text-slate-400 break-all">${esc(url)}</p>`;
+            qrGrid.appendChild(box);
+            new QRCode(box.querySelector('.qr-img'), { text: url, width: 176, height: 176, correctLevel: QRCode.CorrectLevel.M });
+        });
+    }
+    qrBtn.addEventListener('click', () => {
+        qrBase.value = localStorage.getItem(QR_KEY) || (/^https?:/i.test(location.protocol) ? location.href.split('#')[0] : '');
+        qrModal.classList.remove('hidden'); makeQr();
+    });
+    qrModal.querySelector('#qr-close').addEventListener('click', () => qrModal.classList.add('hidden'));
+    qrModal.querySelector('#qr-make').addEventListener('click', makeQr);
+    qrBase.addEventListener('keydown', e => { if (e.key === 'Enter') makeQr(); });
+    qrModal.querySelector('#qr-print').addEventListener('click', () => {
+        const items = [...qrGrid.children].map(b => {
+            const c = b.querySelector('canvas');
+            return c ? `<div style="text-align:center;border:1px solid #ccc;padding:12px;border-radius:8px"><img src="${c.toDataURL()}" width="220"><div style="font:bold 14px sans-serif;margin-top:6px">${b.children[1].textContent}</div><div style="font:10px sans-serif;color:#666;word-break:break-all">${b.children[2].textContent}</div></div>` : '';
+        }).join('');
+        if (!items) { alert('ยังไม่มี QR ให้พิมพ์ กรุณาใส่ URL แล้วกด "สร้างใหม่"'); return; }
+        const w = window.open('', '_blank');
+        if (!w) { alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาต pop-up'); return; }
+        w.document.write(`<html><head><meta charset="utf-8"><title>QR Code แบบฟอร์ม</title></head><body style="margin:16px"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${items}</div></body></html>`);
+        w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+    });
+
+
+    // ---------- กราฟ FM-002 / FM-004 ----------
+    const charts = {};
+    const chartBox = (id, title, sub) => `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4"><h3 class="text-sm font-bold text-slate-800">${title}</h3><p class="text-xs text-slate-500 mb-2">${sub || ''}</p><div class="h-64 relative"><canvas id="${id}"></canvas></div></div>`;
+    function mkChart(id, cfg) {
+        if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+        const el = document.getElementById(id);
+        if (!el || typeof Chart === 'undefined') return;
+        cfg.options = Object.assign({ responsive: true, maintainAspectRatio: false, animation: false }, cfg.options || {});
+        charts[id] = new Chart(el.getContext('2d'), cfg);
+    }
+    const specLine = (label, v, n, color) => ({ type: 'line', label, data: Array(n).fill(v), borderColor: color || '#7c3aed', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5, order: 0 });
+    const daysIn = month => new Date(+month.slice(0, 4), +month.slice(5), 0).getDate();
+
+    function drawSteamCharts(d) {
+        const month = currentDate.slice(0, 7), dd = currentDate.slice(8, 10);
+        const t = ((d.days[dd] || {}).t) || {};
+        const val = (n, f) => ((t[n] || {})[f]) ?? null;
+        const labels = TRAPS.map(x => String(x.n));
+        mkChart('fm-ch-trap-day', {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'IN (°C)', data: TRAPS.map(x => val(x.n, 'i')), backgroundColor: TRAPS.map(x => inBad(val(x.n, 'i'), val(x.n, 'o')) ? '#dc2626' : '#0284c7') },
+                    { label: 'OUT (°C)', data: TRAPS.map(x => val(x.n, 'o')), backgroundColor: TRAPS.map(x => outBad(val(x.n, 'i'), val(x.n, 'o')) ? '#dc2626' : '#f59e0b') },
+                    specLine('Spec IN ' + SPEC_IN, SPEC_IN, 59), specLine('Spec OUT ' + SPEC_OUT, SPEC_OUT, 59, '#059669')
+                ]
+            },
+            options: { scales: { x: { title: { display: true, text: 'No. แทร็ป' } }, y: { beginAtZero: true, title: { display: true, text: '°C' } } } }
+        });
+        const nd = daysIn(month), lab = [], bad = [], aIn = [], aOut = [];
+        for (let x = 1; x <= nd; x++) {
+            const tt = ((d.days[String(x).padStart(2, '0')] || {}).t) || {};
+            let b = 0, si = 0, ci = 0, so = 0, co = 0, any = false;
+            TRAPS.forEach(tr => {
+                const v = tt[tr.n]; if (!v) return;
+                if (v.i != null) { si += v.i; ci++; any = true; }
+                if (v.o != null) { so += v.o; co++; any = true; }
+                if (inBad(v.i, v.o) || outBad(v.i, v.o)) b++;
+            });
+            lab.push(String(x)); bad.push(any ? b : null);
+            aIn.push(ci ? +(si / ci).toFixed(1) : null); aOut.push(co ? +(so / co).toFixed(1) : null);
+        }
+        mkChart('fm-ch-trap-month', {
+            type: 'bar',
+            data: {
+                labels: lab,
+                datasets: [
+                    { label: 'จำนวนตัวที่ผิด Spec', data: bad, backgroundColor: '#dc2626', yAxisID: 'yBad' },
+                    { type: 'line', label: 'เฉลี่ย IN (°C)', data: aIn, borderColor: '#0284c7', backgroundColor: '#0284c7', tension: 0.3, yAxisID: 'yT', spanGaps: true },
+                    { type: 'line', label: 'เฉลี่ย OUT (°C)', data: aOut, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.3, yAxisID: 'yT', spanGaps: true }
+                ]
+            },
+            options: { scales: {
+                x: { title: { display: true, text: 'วันที่' } },
+                yBad: { type: 'linear', position: 'left', beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'จำนวนตัว' } },
+                yT: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: '°C' } }
+            } }
+        });
+    }
+
+    function drawPhCharts(d) {
+        const month = currentDate.slice(0, 7), nd = daysIn(month), labels = [], keys = [];
+        for (let x = 1; x <= nd; x++) ['A', 'B'].forEach(sh => { labels.push(x + sh); keys.push([String(x).padStart(2, '0'), sh]); });
+        const series = f => keys.map(([k, sh]) => (((d.days[k] || {})[sh]) || {})[f] ?? null);
+        const line = (f, label, color) => ({ label, data: series(f), borderColor: color, backgroundColor: color, tension: 0.25, spanGaps: true, pointRadius: 3 });
+        const n = labels.length, xAx = { title: { display: true, text: 'วันที่ / กะ' }, ticks: { maxRotation: 90, autoSkip: true, maxTicksLimit: 31 } };
+        const yAx = { title: { display: true, text: 'pH' } };
+        mkChart('fm-ch-ph-soft', { type: 'line', data: { labels, datasets: [line('soft', 'Soft water', '#0284c7'), specLine('Spec min 5.8', 5.8, n, '#dc2626'), specLine('Spec max 9.5', 9.5, n, '#dc2626')] }, options: { scales: { x: xAx, y: yAx } } });
+        mkChart('fm-ch-ph-bd', { type: 'line', data: { labels, datasets: [line('b1', 'Boiler 1', '#d97706'), line('b2', 'Boiler 2', '#2563eb'), line('b3', 'Boiler 3', '#059669'), specLine('Spec min 8.5', 8.5, n, '#dc2626'), specLine('Spec max 11.8', 11.8, n, '#dc2626')] }, options: { scales: { x: xAx, y: yAx } } });
+        mkChart('fm-ch-ph-tap', { type: 'line', data: { labels, datasets: [line('tap', 'น้ำประปา', '#7c3aed'), specLine('Spec min 6.5', 6.5, n, '#dc2626'), specLine('Spec max 8.5', 8.5, n, '#dc2626')] }, options: { scales: { x: xAx, y: yAx } } });
+    }
+
+
+    // ---------- ส่งออก Excel ตามเลย์เอาต์ฟอร์มจริง ----------
+    const pad2 = x => String(x).padStart(2, '0');
+    const verText = d => (d.verify && d.verify.signed) ? `ผู้ทวนสอบ (หัวหน้าแผนก Boiler): ${d.verify.by || ''}  ${d.verify.at || ''}` : 'ผู้ทวนสอบ (หัวหน้าแผนก Boiler): ..................................  วันที่ ....../....../......';
+    function saveBook(sheets, file) {
+        if (typeof XLSX === 'undefined') { alert('โหลดไลบรารี Excel ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); return; }
+        const wb = XLSX.utils.book_new();
+        sheets.forEach(sh => {
+            const ws = XLSX.utils.aoa_to_sheet(sh.rows);
+            ws['!merges'] = sh.merges; ws['!cols'] = sh.cols;
+            XLSX.utils.book_append_sheet(wb, ws, sh.name);
+        });
+        XLSX.writeFile(wb, file);
+    }
+
+    function steamSheet(d, month, days, page, total, nd) {
+        const W = 24, blank = () => Array(W).fill(''), rows = [], merges = [];
+        const m = (r1, c1, r2, c2) => merges.push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
+        let r = blank(); r[2] = `บันทึกการตรวจวัดสตีมแทร็ป (Steam trap measurement record) ประจำเดือน ${month}`; r[23] = `หน้า ${page}/${total}`; rows.push(r); m(0, 2, 0, 22);
+        r = blank(); r[0] = 'No.'; r[1] = 'สถานที่ติดตั้ง'; r[2] = 'วันที่'; rows.push(r);
+        m(1, 0, 4, 0); m(1, 1, 4, 1); m(1, 2, 1, 23);
+        r = blank(); days.forEach((x, k) => { r[2 + 2 * k] = x <= nd ? x : ''; m(2, 2 + 2 * k, 2, 3 + 2 * k); }); rows.push(r);
+        r = blank(); r[2] = `Spec. IN ≥ ${SPEC_IN}   Spec. OUT ≥ ${SPEC_OUT}`; rows.push(r); m(3, 2, 3, 23);
+        r = blank(); days.forEach((x, k) => { r[2 + 2 * k] = 'IN'; r[3 + 2 * k] = 'OUT'; }); rows.push(r);
+        TRAPS.forEach(tr => {
+            r = blank(); r[0] = tr.n; r[1] = tr.m;
+            days.forEach((x, k) => {
+                if (x > nd) return;
+                const v = ((((d.days[pad2(x)] || {}).t) || {})[tr.n]) || {};
+                r[2 + 2 * k] = v.i ?? ''; r[3 + 2 * k] = v.o ?? '';
+            });
+            rows.push(r);
+        });
+        const opRow = rows.length;
+        r = blank(); r[0] = 'ผู้ตรวจวัด'; m(opRow, 0, opRow, 1);
+        days.forEach((x, k) => { if (x <= nd) r[2 + 2 * k] = (d.days[pad2(x)] || {}).operator || ''; m(opRow, 2 + 2 * k, opRow, 3 + 2 * k); });
+        rows.push(r);
+        rows.push(blank());
+        [['หมายเหตุ:', '1. IN คือ Steam trap ด้านไอน้ำเข้า อุณหภูมิต้องมากกว่า Steam trap ด้านไอน้ำออก'], ['', '2. ความถี่ในการตรวจวัด 1 ครั้ง/วัน'], ['', '3. บันทึกเพิ่มเติม : ' + (d.remarks || '')], ['', verText(d)]]
+            .forEach(([a, b]) => { r = blank(); r[0] = a; r[1] = b; rows.push(r); });
+        return { name: `FM-002 (${page})`, rows, merges, cols: [{ wch: 5 }, { wch: 16 }].concat(Array(22).fill({ wch: 7 })) };
+    }
+    function exportSteamXlsx() {
+        const month = currentDate.slice(0, 7), d = getSteam(), nd = daysIn(month);
+        const pages = [[1, 11], [12, 22], [23, 33]].map(([a, b]) => Array.from({ length: 11 }, (_, k) => a + k).filter(x => x <= Math.max(b, a)).slice(0, b - a + 1));
+        saveBook(pages.map((days, i) => steamSheet(d, month, days, i + 1, 3, nd)), `LFB-BOS-FM-002_${month}.xlsx`);
+    }
+
+    function phSheet(d, month, from, to, page, total, nd) {
+        const W = 10, blank = () => Array(W).fill(''), rows = [], merges = [];
+        const m = (r1, c1, r2, c2) => merges.push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
+        let r = blank(); r[0] = `บันทึกการตรวจเช็คค่า pH ของ น้ำในระบบหม้อไอน้ำ (Boiler) ประจำเดือน ${month}`; r[9] = `หน้า ${page}/${total}`; rows.push(r); m(0, 0, 0, 8);
+        r = blank(); r[0] = 'วันที่'; r[1] = 'กะ'; r[2] = 'เวลา'; r[3] = 'pH'; r[8] = 'ลงชื่อผู้เช็ค'; r[9] = 'หมายเหตุ'; rows.push(r);
+        r = blank(); r[3] = 'Soft water'; r[4] = 'Blowdown'; r[7] = 'น้ำประปา'; rows.push(r);
+        r = blank(); r[4] = 'Boiler No.1'; r[5] = 'Boiler No.2'; r[6] = 'Boiler No.3'; rows.push(r);
+        r = blank(); r[3] = 'Spec. 5.8 - 9.5'; r[4] = 'Spec. 8.5 - 11.8'; r[7] = 'Spec. 6.5 - 8.5'; rows.push(r);
+        [0, 1, 2].forEach(c => m(1, c, 4, c)); m(1, 3, 1, 7); m(2, 3, 3, 3); m(2, 4, 2, 6); m(2, 7, 3, 7); m(4, 4, 4, 6); m(1, 8, 4, 8); m(1, 9, 4, 9);
+        for (let x = from; x <= to; x++) {
+            const k = pad2(x), start = rows.length;
+            ['A', 'B'].forEach((sh, j) => {
+                const v = x <= nd ? (((d.days[k] || {})[sh]) || {}) : {};
+                r = blank(); r[0] = j === 0 && x <= nd ? x : ''; r[1] = sh; r[2] = v.time || '';
+                r[3] = v.soft ?? ''; r[4] = v.b1 ?? ''; r[5] = v.b2 ?? ''; r[6] = v.b3 ?? ''; r[7] = v.tap ?? '';
+                r[8] = v.operator || ''; r[9] = v.note || ''; rows.push(r);
+            });
+            m(start, 0, start + 1, 0);
+        }
+        r = blank(); r[0] = 'หมายเหตุ:'; r[1] = 'ความถี่ในการตรวจเช็ค 1 ครั้ง/กะ'; rows.push(r);
+        r = blank(); r[6] = verText(d); rows.push(r);
+        return { name: `FM-004 (${page})`, rows, merges, cols: [{ wch: 8 }, { wch: 5 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 24 }] };
+    }
+    function exportPhXlsx() {
+        const month = currentDate.slice(0, 7), d = getPh(), nd = daysIn(month);
+        saveBook([phSheet(d, month, 1, 16, 1, 2, nd), phSheet(d, month, 17, 31, 2, 2, nd)], `LFB-BOS-FM-004_${month}.xlsx`);
+    }
 
     function pushPending() { /* ซิงค์ซ้ำเมื่อกลับมาออนไลน์ */ window.addEventListener('online', pushAllForms); }
     pushPending();
