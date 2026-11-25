@@ -2013,5 +2013,277 @@
             }, '*');
         });
     </script>
+
+    <!-- FM-002 / FM-004 รวมในหน้าเดียว -->
+<script>
+(function () {
+    'use strict';
+    // ค่า Spec pH (ตั้งสมมติฐานไว้ แก้ให้ตรงแบบฟอร์ม FM-004 ได้ที่นี่)
+    // FM-004 Rev.02: Soft water 5.8-9.5 · Blowdown (Boiler 1/2/3) 8.5-11.8 · น้ำประปา 6.5-8.5
+    const PH_FIELDS = [['soft', 'Soft water', [5.8, 9.5]], ['b1', 'Blowdown Boiler 1', [8.5, 11.8]], ['b2', 'Blowdown Boiler 2', [8.5, 11.8]], ['b3', 'Blowdown Boiler 3', [8.5, 11.8]], ['tap', 'น้ำประปา', [6.5, 8.5]]];
+    let active = 'daily';
+    const timers = new Map();
+
+    const sel = document.getElementById('form-selector');
+    sel.options[1].text = 'FM-002 ตรวจเช็คสตีมแทร๊ป';
+    sel.options[2].text = 'FM-004 บันทึกตรวจเช็คค่า pH';
+    const panel = document.createElement('div');
+    panel.id = 'forms-panel';
+    panel.className = 'hidden space-y-4';
+    document.querySelector('main').insertBefore(panel, document.getElementById('view-cards-container'));
+
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const num = v => (v === '' || v == null || !Number.isFinite(Number(v))) ? null : Number(v);
+    const load = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+    const sKey = (b, m) => `form_steam_${m}`;   // FM-002 เป็นรายเดือน ใช้ร่วมกันทุกบอยเลอร์
+    const fb = () => 0;   // ทั้ง FM-002 และ FM-004 ไม่แยกตามบอยเลอร์
+    const pKey = (b, m) => `form_ph_${m}`;   // FM-004 รายเดือน รวมทั้ง 3 บอยเลอร์ในแถวเดียว
+    const storeKey = (form, b, key) => form === 'steam' ? sKey(b, key) : pKey(b, key);
+    const opSelect = (val, attrs) => `<select ${attrs} class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white"><option value="">-</option>${OPERATORS.map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+    const inp = 'border border-slate-300 rounded-lg px-2 py-1.5 text-xs w-full';
+
+    // ---------- Show / hide ----------
+    function showForm(f) {
+        active = f; sel.value = f;
+        const ids = ['view-cards-container', 'view-table-container', 'view-chart-container', 'view-efficiency-container', 'boiler-extra-sections'];
+        const modeBar = document.getElementById('view-btn-cards').parentElement;
+        const ex = document.getElementById('boiler-export-actions');
+        if (f === 'daily') {
+            panel.classList.add('hidden');
+            modeBar.classList.remove('hidden'); ex.classList.remove('hidden');
+            document.getElementById('boiler-extra-sections').classList.remove('hidden');
+            switchView(currentView);
+            checkSpecAlerts(getData());
+        } else {
+            ids.forEach(id => document.getElementById(id).classList.add('hidden'));
+            modeBar.classList.add('hidden'); ex.classList.add('hidden');
+            document.getElementById('spec-alert-banner').classList.add('hidden');
+            panel.classList.remove('hidden');
+            render(); pullCurrent();
+        }
+    }
+    window.selectInspectionForm = showForm;
+    window.openSteamTrapReport = () => showForm('steam');
+    window.openPhReport = () => showForm('ph');
+
+    const _load = window.loadDateData;
+    window.loadDateData = function () { _load(); if (active !== 'daily') { render(); pullCurrent(); } };
+    const _chk = window.checkSpecAlerts;
+    window.checkSpecAlerts = function (d) { _chk(d); if (active !== 'daily') document.getElementById('spec-alert-banner').classList.add('hidden'); };
+    const _sync = window.syncNow;
+    window.syncNow = function () { _sync(); pushAllForms(); };
+
+    // ---------- Storage + Sheets sync ----------
+    function merge(form, l, r) {
+        if (!r) return l; if (!l) return r;
+        const out = { days: Object.assign({}, l.days) };
+        Object.entries(r.days || {}).forEach(([d, v]) => { if (!out.days[d] || (v._ts || 0) > (out.days[d]._ts || 0)) out.days[d] = v; });
+        ['remarks', 'verify'].forEach(k => {
+            const t = k + '_ts', src = (r[t] || 0) > (l[t] || 0) ? r : l;
+            if (src[k] !== undefined) { out[k] = src[k]; out[t] = src[t] || 0; }
+        });
+        return out;
+    }
+    function put(form, b, key, doc) {
+        doc._ts = Date.now();
+        localStorage.setItem(storeKey(form, b, key), JSON.stringify(doc));
+        if (!syncCfg().url) return;
+        const t = form + b + key;
+        clearTimeout(timers.get(t));
+        setSyncStatus('busy', 'รอซิงค์...');
+        timers.set(t, setTimeout(() => { timers.delete(t); push(form, b, key); }, 1500));
+    }
+    function isCurrent(form, b, key) {
+        return active === form && key === currentDate.slice(0, 7);
+    }
+    function refresh(form, b, key) { if (isCurrent(form, b, key) && !panel.contains(document.activeElement)) render(); }
+    function push(form, b, key) {
+        return withStatus(async () => {
+            const lk = storeKey(form, b, key), raw = load(lk);
+            if (!raw) return;
+            const res = await syncCall('POST', {}, { action: 'save_form', form, boiler: fb(form, b), key, doc: raw });
+            if (res.doc) { localStorage.setItem(lk, JSON.stringify(merge(form, load(lk), res.doc))); refresh(form, b, key); }
+        });
+    }
+    function pull(form, b, key) {
+        return withStatus(async () => {
+            const res = await syncCall('GET', { action: 'get_form', form, boiler: fb(form, b), key });
+            if (!res.doc) return;
+            const lk = storeKey(form, b, key), raw = localStorage.getItem(lk);
+            const m = merge(form, raw ? JSON.parse(raw) : null, res.doc);
+            if (JSON.stringify(m) !== raw) { localStorage.setItem(lk, JSON.stringify(m)); refresh(form, b, key); }
+        });
+    }
+    function pullCurrent() {
+        if (active === 'steam') pull('steam', currentBoiler, currentDate.slice(0, 7));
+        else if (active === 'ph') pull('ph', currentBoiler, currentDate.slice(0, 7));
+    }
+    function pushAllForms() {
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i) || '';
+            let m = /^form_steam_(\d{4}-\d{2})$/.exec(k);
+            if (m) push('steam', 0, m[1]);
+            m = /^form_ph_(\d{4}-\d{2})$/.exec(k);
+            if (m) push('ph', 0, m[1]);
+        }
+    }
+    setInterval(() => {
+        if (active !== 'daily' && !document.hidden && !panel.contains(document.activeElement) && syncCfg().url) pullCurrent();
+    }, 60000);
+
+    // ---------- Render ----------
+    function render() { if (active === 'steam') renderSteam(); else if (active === 'ph') renderPh(); }
+    const card = 'bg-white rounded-2xl shadow-sm border border-slate-200 p-4';
+
+    const TRAPS = [];
+    for (let n = 1; n <= 59; n++) TRAPS.push({ n, m: n <= 19 ? 'BHS' : n <= 44 ? 'ISOWA' : 'YUELI' });
+    const SPEC_IN = 120, SPEC_OUT = 80;   // ตามฟอร์ม LFB-BOS-FM-002 Rev.04
+    let showGrid = false;
+    const inBad = (i, o) => i != null && (i < SPEC_IN || (o != null && i <= o));
+    const outBad = (i, o) => o != null && (o < SPEC_OUT || (i != null && i <= o));
+    function getSteam() { return load(sKey(0, currentDate.slice(0, 7))) || { days: {}, remarks: '' }; }
+    function steamSummary(d) {
+        const t = ((d.days[currentDate.slice(8, 10)] || {}).t) || {};
+        let done = 0, bad = 0;
+        TRAPS.forEach(tr => { const v = t[tr.n] || {}; if (v.i != null || v.o != null) done++; if (inBad(v.i, v.o) || outBad(v.i, v.o)) bad++; });
+        const el = document.getElementById('steam-sum');
+        if (el) { el.textContent = `บันทึกแล้ว ${done}/59 ตัว · ผิด Spec ${bad} ตัว`; el.className = 'text-xs mb-2 ' + (bad ? 'text-red-600 font-semibold' : 'text-slate-500'); }
+    }
+    function renderSteam() {
+        const month = currentDate.slice(0, 7), dd = currentDate.slice(8, 10), d = getSteam();
+        const day = d.days[dd] || { t: {} }, t = day.t || {};
+        let rows = '', last = '';
+        TRAPS.forEach(tr => {
+            const v = t[tr.n] || {};
+            if (tr.m !== last) { last = tr.m; rows += `<tr class="bg-slate-100 font-bold"><td colspan="4" class="p-2">${tr.m}</td></tr>`; }
+            const c = (f, bad) => `<td class="p-1"><input type="number" step="any" inputmode="decimal" data-n="${tr.n}" data-f="${f}" value="${v[f] ?? ''}" class="${inp} w-24 text-center ${bad ? 'out-of-spec' : ''}"></td>`;
+            rows += `<tr class="border-b border-slate-200"><td class="p-1.5 text-center text-slate-500">${tr.n}</td><td class="p-1.5">${tr.m}</td>${c('i', inBad(v.i, v.o))}${c('o', outBad(v.i, v.o))}</tr>`;
+        });
+        let grid = '';
+        if (showGrid) {
+            const nd = new Date(+month.slice(0, 4), +month.slice(5), 0).getDate();
+            let h = '<tr class="bg-slate-800 text-white"><th class="p-1">No.</th><th class="p-1">เครื่อง</th>';
+            for (let x = 1; x <= nd; x++) h += `<th class="p-1">${x}</th>`;
+            grid = h + '</tr>';
+            TRAPS.forEach(tr => {
+                grid += `<tr class="border-b"><td class="p-1 text-center">${tr.n}</td><td class="p-1">${tr.m}</td>`;
+                for (let x = 1; x <= nd; x++) {
+                    const v = ((((d.days[String(x).padStart(2, '0')] || {}).t) || {})[tr.n]) || {};
+                    const has = v.i != null || v.o != null;
+                    grid += `<td class="p-1 text-center whitespace-nowrap ${inBad(v.i, v.o) || outBad(v.i, v.o) ? 'out-of-spec' : ''}">${has ? `${v.i ?? '-'}/${v.o ?? '-'}` : ''}</td>`;
+                }
+                grid += '</tr>';
+            });
+            grid = `<div class="table-scroll overflow-auto border border-slate-200 rounded-xl max-h-[70vh] mt-4"><table class="text-[11px]">${grid}</table></div>`;
+        }
+        panel.innerHTML = `<div class="${card}">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-1">
+                <h2 class="text-base font-bold text-slate-800"><i class="fa-solid fa-faucet-drip text-amber-600"></i> FM-002 บันทึกการตรวจวัดสตีมแทร็ป · วันที่ ${esc(currentDate)}</h2>
+                <button data-act="grid" class="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold">${showGrid ? 'ซ่อน' : 'ดู'}ตารางทั้งเดือน ${month}</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-1">Spec: IN ≥ ${SPEC_IN} °C · OUT ≥ ${SPEC_OUT} °C · IN ต้องสูงกว่า OUT · ตรวจ 1 ครั้ง/วัน · ใช้ร่วมกันทุกบอยเลอร์</p>
+            <p id="steam-sum"></p>
+            <div class="table-scroll overflow-auto border border-slate-200 rounded-xl max-h-[70vh]"><table class="w-full text-xs">
+                <thead class="bg-slate-800 text-white sticky top-0"><tr><th class="p-2">No.</th><th class="p-2">สถานที่ติดตั้ง</th><th class="p-2">IN (°C)</th><th class="p-2">OUT (°C)</th></tr></thead>
+                <tbody>${rows}</tbody></table></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-xs">
+                <div><label class="font-semibold text-slate-700 block mb-1">ผู้ตรวจวัด (วันนี้)</label>${opSelect(day.operator, 'data-f="operator"')}</div>
+                <div><label class="font-semibold text-slate-700 block mb-1">บันทึกเพิ่มเติม (ทั้งเดือน)</label><textarea data-f="remarks" rows="3" class="${inp}">${esc(d.remarks)}</textarea></div>
+            </div>${grid}</div>`;
+        steamSummary(d);
+    }
+    function paintTrap(n, v) {
+        panel.querySelectorAll(`[data-n="${n}"]`).forEach(el => el.classList.toggle('out-of-spec', el.dataset.f === 'i' ? inBad(v.i, v.o) : outBad(v.i, v.o)));
+    }
+
+    let phGrid = false;
+    const phOut = (v, sp) => v != null && (v < sp[0] || v > sp[1]);
+    function getPh() { return load(pKey(0, currentDate.slice(0, 7))) || { days: {} }; }
+    function renderPh() {
+        const month = currentDate.slice(0, 7), dd = currentDate.slice(8, 10), d = getPh(), day = d.days[dd] || {};
+        const shift = sh => {
+            const r = day[sh] || {};
+            return `<div class="border border-slate-200 rounded-xl p-3"><h3 class="text-sm font-bold mb-2">กะ ${sh}</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div><label class="block font-semibold mb-1">เวลา</label><input type="time" data-s="${sh}" data-f="time" value="${esc(r.time)}" class="${inp}"></div>
+                ${PH_FIELDS.map(([f, l, sp]) => `<div><label class="block font-semibold mb-1">${l} <span class="font-normal text-slate-400">(${sp[0]}–${sp[1]})</span></label><input type="number" step="0.01" inputmode="decimal" data-s="${sh}" data-f="${f}" value="${r[f] ?? ''}" class="${inp} ${phOut(r[f], sp) ? 'out-of-spec' : ''}"></div>`).join('')}
+                <div><label class="block font-semibold mb-1">ลงชื่อผู้เช็ค</label>${opSelect(r.operator, `data-s="${sh}" data-f="operator"`)}</div>
+                <div class="col-span-2"><label class="block font-semibold mb-1">หมายเหตุ</label><input data-s="${sh}" data-f="note" value="${esc(r.note)}" class="${inp}"></div>
+                </div></div>`;
+        };
+        let grid = '';
+        if (phGrid) {
+            const nd = new Date(+month.slice(0, 4), +month.slice(5), 0).getDate();
+            grid = '<tr class="bg-slate-800 text-white"><th class="p-1">วันที่</th><th class="p-1">กะ</th><th class="p-1">เวลา</th>' + PH_FIELDS.map(f => `<th class="p-1">${f[1]}</th>`).join('') + '<th class="p-1">ผู้เช็ค</th><th class="p-1">หมายเหตุ</th></tr>';
+            for (let x = 1; x <= nd; x++) {
+                const k = String(x).padStart(2, '0');
+                ['A', 'B'].forEach(sh => {
+                    const r = ((d.days[k] || {})[sh]) || {};
+                    grid += `<tr class="border-b ${sh === 'A' ? 'border-t-2' : ''}"><td class="p-1 text-center">${sh === 'A' ? x : ''}</td><td class="p-1 text-center">${sh}</td><td class="p-1">${esc(r.time)}</td>`
+                        + PH_FIELDS.map(([f, , sp]) => `<td class="p-1 text-center ${phOut(r[f], sp) ? 'out-of-spec' : ''}">${r[f] ?? ''}</td>`).join('')
+                        + `<td class="p-1">${esc(r.operator)}</td><td class="p-1">${esc(r.note)}</td></tr>`;
+                });
+            }
+            grid = `<div class="table-scroll overflow-auto border border-slate-200 rounded-xl max-h-[70vh] mt-4"><table class="w-full text-[11px]">${grid}</table></div>`;
+        }
+        const v = d.verify || {};
+        panel.innerHTML = `<div class="${card}">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-1">
+                <h2 class="text-base font-bold text-slate-800"><i class="fa-solid fa-flask text-amber-600"></i> FM-004 บันทึกตรวจเช็คค่า pH ของน้ำในระบบหม้อไอน้ำ · วันที่ ${esc(currentDate)}</h2>
+                <button data-act="phgrid" class="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold">${phGrid ? 'ซ่อน' : 'ดู'}ตารางทั้งเดือน ${month}</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">ตรวจ 1 ครั้ง/กะ (กะ A, B) · ช่องที่ออกนอก Spec จะแดง · ใช้ร่วมกันทั้ง 3 บอยเลอร์</p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">${shift('A')}${shift('B')}</div>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <span class="font-semibold">ผู้ทวนสอบ (หัวหน้าแผนก Boiler) ประจำเดือน ${month}:</span>
+                <span class="${v.signed ? 'text-emerald-700 font-semibold' : 'text-amber-700'}">${v.signed ? `ทวนสอบแล้ว (${esc(v.by)}) ${esc(v.at)}` : 'รอการทวนสอบ'}</span>
+                <button data-act="phverify" class="ml-auto px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold">${v.signed ? 'ยกเลิกการทวนสอบ' : 'ลงนามทวนสอบ'}</button>
+            </div>${grid}</div>`;
+    }
+
+    // ---------- Events ----------
+    panel.addEventListener('change', e => {
+        const t = e.target, f = t.dataset.f;
+        if (!f) return;
+        if (active === 'steam') {
+            const month = currentDate.slice(0, 7), dd = currentDate.slice(8, 10), d = getSteam();
+            d.days[dd] = d.days[dd] || {}; const day = d.days[dd]; day.t = day.t || {};
+            if (f === 'remarks') { d.remarks = t.value; d.remarks_ts = Date.now(); }
+            else {
+                if (f === 'operator') day.operator = t.value;
+                else { const n = t.dataset.n; day.t[n] = day.t[n] || {}; day.t[n][f] = num(t.value); paintTrap(n, day.t[n]); }
+                day._ts = Date.now();
+            }
+            put('steam', currentBoiler, month, d); steamSummary(d);
+        } else if (active === 'ph') {
+            const month = currentDate.slice(0, 7), dd = currentDate.slice(8, 10), d = getPh(), sh = t.dataset.s;
+            d.days[dd] = d.days[dd] || {};
+            const r = (d.days[dd][sh] = d.days[dd][sh] || {});
+            r[f] = (f === 'operator' || f === 'note' || f === 'time') ? t.value : num(t.value);
+            d.days[dd]._ts = Date.now();
+            const sp = PH_FIELDS.find(x => x[0] === f);
+            if (sp) t.classList.toggle('out-of-spec', phOut(r[f], sp[2]));
+            put('ph', currentBoiler, month, d);
+        }
+    });
+    panel.addEventListener('click', e => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        if (active === 'steam' && b.dataset.act === 'grid') { showGrid = !showGrid; renderSteam(); }
+        else if (active === 'ph' && b.dataset.act === 'phgrid') { phGrid = !phGrid; renderPh(); }
+        else if (active === 'ph' && b.dataset.act === 'phverify') {
+            if (currentRole !== 'supervisor') { alert("การลงนามทวนสอบต้องเข้าสู่ระบบในบทบาท 'หัวหน้างาน' เท่านั้น"); openLoginModal(); return; }
+            const d = getPh();
+            d.verify = (d.verify && d.verify.signed) ? { signed: false } : { signed: true, by: SUPERVISOR_NAME, at: new Date().toLocaleString('th-TH') };
+            d.verify_ts = Date.now();
+            put('ph', currentBoiler, currentDate.slice(0, 7), d);
+            renderPh();
+        }
+    });
+
+    function pushPending() { /* ซิงค์ซ้ำเมื่อกลับมาออนไลน์ */ window.addEventListener('online', pushAllForms); }
+    pushPending();
+})();
+</script>
 </body>
 </html>
